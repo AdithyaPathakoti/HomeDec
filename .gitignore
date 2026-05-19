@@ -1,0 +1,33 @@
+# Python virtual environment
+backend/venv/
+venv/
+ENV/
+env/
+
+# Python cache files
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Model weights (too large for typical Git repo)
+backend/*.pt
+*.pt
+
+# Uploads and Outputs directories
+uploads/
+outputs/
+backend/uploads/
+backend/outputs/
+
+# Temporary test images / local artifacts
+temp_test_blend_output.png
+temp_test_mask.png
+bedroom_sample.png
+backend/temp_mask.png
+backend/test_fastsam_*
+backend/test_sam2_*
+
+# OS files
+.DS_Store
+Thumbs.db
