@@ -33,7 +33,7 @@ class HomeScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'FabricFlow AI',
+                'Vastra',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 36,

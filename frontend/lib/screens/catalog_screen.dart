@@ -43,7 +43,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
         title: "Luxury Rose Pattern", 
         prompt: "Luxury modern floral bedsheet fabric with realistic folds and shadows", 
         imagePath: "",
-        description: "AI-generated rich crimson rose pattern for a romantic, luxurious bedroom feel."),
+        description: "Rich crimson rose pattern for a romantic, luxurious bedroom feel."),
     FabricDesign(
         title: "Minimalist Beige", 
         prompt: "Minimalist soft beige linen fabric texture, realistic lighting", 
@@ -477,34 +477,15 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            design.title,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (!hasImage)
-                          Container(
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                            ),
-                            child: Text(
-                              "AI",
-                              style: TextStyle(color: Colors.blue[300], fontSize: 8, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                      ],
+                    Text(
+                      design.title,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     SizedBox(height: 4),
                     Text(

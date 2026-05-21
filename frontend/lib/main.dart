@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
 
 void main() {
-  runApp(const FabricFlowApp());
+  runApp(const VastraApp());
 }
 
-class FabricFlowApp extends StatelessWidget {
-  const FabricFlowApp({super.key});
+class VastraApp extends StatelessWidget {
+  const VastraApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FabricFlow AI',
+      title: 'Vastra',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,

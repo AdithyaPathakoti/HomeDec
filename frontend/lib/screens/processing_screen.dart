@@ -33,7 +33,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
 
   Future<void> _processImage() async {
     setState(() {
-      _status = "AI is redesigning your fabric. This may take a minute...";
+      _status = "Redesigning your fabric. This may take a moment...";
     });
 
     final requestId = await _apiService.generateImage(

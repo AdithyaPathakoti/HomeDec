@@ -193,7 +193,7 @@ class MaskPainter extends CustomPainter {
 
         final textPainter = TextPainter(
           text: TextSpan(
-            text: "✨ ${obj.label[0].toUpperCase()}${obj.label.substring(1)} (${(obj.confidence * 100).toStringAsFixed(0)}%)",
+            text: "${obj.label[0].toUpperCase()}${obj.label.substring(1)}",
             style: TextStyle(
               color: isSelected ? Colors.black : Colors.white,
               fontSize: 9,
@@ -503,7 +503,7 @@ class _MaskingWidgetState extends State<MaskingWidget> with SingleTickerProvider
                     ),
                     child: Center(
                       child: Text(
-                        "✨ Smart Mask",
+                        "Auto Detection",
                         style: TextStyle(
                           color: _mode == MaskMode.smart ? Colors.purpleAccent : Colors.grey,
                           fontWeight: FontWeight.bold,
@@ -524,7 +524,7 @@ class _MaskingWidgetState extends State<MaskingWidget> with SingleTickerProvider
                     ),
                     child: Center(
                       child: Text(
-                        "🖌️ Manual Brush",
+                        "Manual Brush",
                         style: TextStyle(
                           color: _mode == MaskMode.manual ? Colors.white : Colors.grey,
                           fontWeight: FontWeight.bold,
@@ -563,7 +563,7 @@ class _MaskingWidgetState extends State<MaskingWidget> with SingleTickerProvider
                       ),
                       SizedBox(width: 12),
                       Text(
-                        "⚡ AI Scanning Room Furniture...",
+                        "Scanning room layout...",
                         style: TextStyle(
                           color: Colors.purpleAccent,
                           fontSize: 13,
@@ -578,8 +578,8 @@ class _MaskingWidgetState extends State<MaskingWidget> with SingleTickerProvider
                       children: [
                         Text(
                           _detectedObjects.isNotEmpty
-                              ? "Tap inside the purple bounding boxes to auto-segment furniture."
-                              : "Tap on the fabric to magically select it.",
+                              ? "Tap inside the highlighted sections to automatically select furniture."
+                              : "Tap on the fabric to automatically select it.",
                           style: const TextStyle(color: Colors.white70, fontSize: 13),
                           textAlign: TextAlign.center,
                         ),
@@ -667,7 +667,7 @@ class _MaskingWidgetState extends State<MaskingWidget> with SingleTickerProvider
                           CircularProgressIndicator(color: Colors.purpleAccent),
                           SizedBox(height: 12),
                           Text(
-                            "⚡ Smart Masking...",
+                            "Analyzing...",
                             style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                         ],

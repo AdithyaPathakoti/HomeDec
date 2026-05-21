@@ -4,8 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
 class ApiService {
-  // Use the PC's local IP address so physical mobile devices on the same Wi-Fi can access the backend
-  static const String baseUrl = 'http://192.168.1.10:8000';
+  // Use localhost via adb reverse port forwarding for secure, fast, firewall-free debugging on physical USB devices
+  static const String baseUrl = 'http://127.0.0.1:8000';
 
   Future<String?> generateImage({
     required Uint8List imageBytes,
