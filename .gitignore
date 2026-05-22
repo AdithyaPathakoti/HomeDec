@@ -31,3 +31,13 @@ backend/test_sam2_*
 # OS files
 .DS_Store
 Thumbs.db
+
+# IDE files
+.idea/
+
+# Android build outputs
+frontend/android/build/
+
+# Backend test outputs
+backend/test_out_*
+

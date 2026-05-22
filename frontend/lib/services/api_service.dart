@@ -1,128 +1,65 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import '../core/constants.dart';
 
 class ApiService {
-  // Use localhost via adb reverse port forwarding for secure, fast, firewall-free debugging on physical USB devices
-  static const String baseUrl = 'http://127.0.0.1:8000';
+  ApiService._();
+  static final ApiService instance = ApiService._();
 
-  Future<String?> generateImage({
-    required Uint8List imageBytes,
-    required Uint8List maskBytes,
-    required String prompt,
-    Uint8List? designBytes,
-  }) async {
+  /// Quick health check – returns true if the backend is reachable.
+  Future<bool> checkHealth() async {
     try {
-      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/generate'));
-      
-      request.files.add(http.MultipartFile.fromBytes(
-        'image', 
-        imageBytes,
-        filename: 'image.png',
-        contentType: MediaType('image', 'png')
-      ));
-      
-      request.files.add(http.MultipartFile.fromBytes(
-        'mask', 
-        maskBytes,
-        filename: 'mask.png',
-        contentType: MediaType('image', 'png')
-      ));
-      
-      if (designBytes != null && designBytes.isNotEmpty) {
-        request.files.add(http.MultipartFile.fromBytes(
-          'design', 
-          designBytes,
-          filename: 'design.png',
-          contentType: MediaType('image', 'png')
-        ));
-      }
-      
-      request.fields['prompt'] = prompt;
-
-      var response = await request.send();
-      if (response.statusCode == 200) {
-        var responseData = await response.stream.bytesToString();
-        var json = jsonDecode(responseData);
-        return json['request_id'];
-      } else {
-        print('Error: ${response.statusCode}');
-        return null;
-      }
-    } catch (e) {
-      print('API Error: $e');
-      return null;
+      final response = await http
+          .get(Uri.parse('${VastraConstants.baseUrl}${VastraConstants.healthEndpoint}'))
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
     }
   }
 
-  Future<List<dynamic>?> detectObjects({
-    required Uint8List imageBytes,
+  /// Sends the room image, selected product category, and fabric image to the
+  /// backend and returns the generated result as raw PNG bytes.
+  Future<Uint8List> generateFabric({
+    required Uint8List roomImageBytes,
+    required String productCategory,
+    required Uint8List fabricImageBytes,
   }) async {
-    try {
-      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/detect_objects'));
-      
-      request.files.add(http.MultipartFile.fromBytes(
-        'image', 
-        imageBytes,
-        filename: 'image.png',
-        contentType: MediaType('image', 'png')
-      ));
+    final uri =
+        Uri.parse('${VastraConstants.baseUrl}${VastraConstants.generateEndpoint}');
 
-      var response = await request.send();
-      if (response.statusCode == 200) {
-        var responseData = await response.stream.bytesToString();
-        var json = jsonDecode(responseData);
-        return json['objects'];
-      } else {
-        print('Detect objects API Error: ${response.statusCode}');
-        return null;
-      }
-    } catch (e) {
-      print('Detect objects API Exception: $e');
-      return null;
+    final request = http.MultipartRequest('POST', uri);
+
+    request.files.add(http.MultipartFile.fromBytes(
+      'room_image',
+      roomImageBytes,
+      filename: 'room.jpg',
+      contentType: MediaType('image', 'jpeg'),
+    ));
+
+    request.files.add(http.MultipartFile.fromBytes(
+      'fabric_image',
+      fabricImageBytes,
+      filename: 'fabric.jpg',
+      contentType: MediaType('image', 'jpeg'),
+    ));
+
+    request.fields['product_category'] = productCategory;
+
+    final streamedResponse = await request.send().timeout(
+      const Duration(minutes: 3),
+      onTimeout: () {
+        throw Exception(
+            'Request timed out. The AI processing took longer than 3 minutes.');
+      },
+    );
+
+    if (streamedResponse.statusCode == 200) {
+      return await streamedResponse.stream.toBytes();
+    } else {
+      final body = await streamedResponse.stream.bytesToString();
+      throw Exception('Backend returned ${streamedResponse.statusCode}: $body');
     }
-  }
-
-  Future<Uint8List?> autoMask({
-    required Uint8List imageBytes,
-    required double xPct,
-    required double yPct,
-    required int tolerance,
-    String? box,
-  }) async {
-    try {
-      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/auto_mask'));
-      
-      request.files.add(http.MultipartFile.fromBytes(
-        'image', 
-        imageBytes,
-        filename: 'image.png',
-        contentType: MediaType('image', 'png')
-      ));
-      
-      request.fields['x_pct'] = xPct.toString();
-      request.fields['y_pct'] = yPct.toString();
-      request.fields['tolerance'] = tolerance.toString();
-      if (box != null) {
-        request.fields['box'] = box;
-      }
-
-      var response = await request.send();
-      if (response.statusCode == 200) {
-        final responseBytes = await response.stream.toBytes();
-        return responseBytes;
-      } else {
-        print('Auto-mask API Error: ${response.statusCode}');
-        return null;
-      }
-    } catch (e) {
-      print('Auto-mask API Exception: $e');
-      return null;
-    }
-  }
-
-  String getResultUrl(String requestId) {
-    return '$baseUrl/result/$requestId';
   }
 }
