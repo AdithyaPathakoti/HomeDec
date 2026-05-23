@@ -3,7 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../core/theme.dart';
 import '../models/product_category.dart';
 
-/// Animated product selection card with idle floating, neon glow on selection,
+/// Animated product selection card with idle floating, gold glow on selection,
 /// and staggered entrance animation via flutter_animate.
 class ProductCard extends StatefulWidget {
   final ProductCategoryData data;
@@ -34,7 +34,6 @@ class _ProductCardState extends State<ProductCard>
   @override
   void initState() {
     super.initState();
-    // Each card floats at a slightly different period so they feel independent
     _floatCtrl = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: 2000 + widget.index * 250),
@@ -56,7 +55,6 @@ class _ProductCardState extends State<ProductCard>
       animation: _floatAnim,
       builder: (_, child) {
         return Transform.translate(
-          // Selected cards stop floating and scale up slightly
           offset: Offset(0, widget.isSelected ? 0 : _floatAnim.value),
           child: child,
         );
@@ -72,7 +70,7 @@ class _ProductCardState extends State<ProductCard>
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 280),
             decoration: widget.isSelected
-                ? VastraTheme.neonDecoration(borderRadius: 20)
+                ? VastraTheme.goldDecoration(borderRadius: 20)
                 : VastraTheme.glassDecoration(borderRadius: 20),
             child: _buildContent(),
           ),
@@ -103,20 +101,18 @@ class _ProductCardState extends State<ProductCard>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: widget.isSelected
-                  ? VastraColors.purpleAccent.withOpacity(0.2)
-                  : Colors.white.withOpacity(0.05),
+                  ? VastraColors.gold.withOpacity(0.18)
+                  : VastraColors.ivory.withOpacity(0.05),
               border: Border.all(
                 color: widget.isSelected
-                    ? VastraColors.purpleNeon.withOpacity(0.6)
-                    : Colors.white.withOpacity(0.08),
+                    ? VastraColors.gold.withOpacity(0.7)
+                    : VastraColors.ivory.withOpacity(0.08),
                 width: 1.0,
               ),
             ),
             child: Icon(
               widget.data.icon,
-              color: widget.isSelected
-                  ? VastraColors.purpleNeon
-                  : VastraColors.textSecondary,
+              color: widget.isSelected ? VastraColors.gold : VastraColors.textSecondary,
               size: 26,
             ),
           ),
@@ -126,7 +122,7 @@ class _ProductCardState extends State<ProductCard>
           AnimatedDefaultTextStyle(
             duration: const Duration(milliseconds: 200),
             style: TextStyle(
-              color: widget.isSelected ? Colors.white : VastraColors.textSecondary,
+              color: widget.isSelected ? VastraColors.ivory : VastraColors.textSecondary,
               fontSize: 13,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.2,
@@ -151,20 +147,19 @@ class _ProductCardState extends State<ProductCard>
           if (widget.isSelected) ...[
             const SizedBox(height: 10),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
-                color: VastraColors.purpleAccent.withOpacity(0.2),
+                color: VastraColors.gold.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: VastraColors.purpleNeon.withOpacity(0.4),
+                  color: VastraColors.gold.withOpacity(0.5),
                   width: 0.8,
                 ),
               ),
               child: const Text(
                 'SELECTED',
                 style: TextStyle(
-                  color: VastraColors.purpleNeon,
+                  color: VastraColors.gold,
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.5,

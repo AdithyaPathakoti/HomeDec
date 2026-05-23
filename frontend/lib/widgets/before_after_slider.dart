@@ -63,7 +63,7 @@ class _BeforeAfterSliderState extends State<BeforeAfterSlider> {
                   ),
                 ),
 
-                // ── Divider line ─────────────────────────────────────────────
+                // ── Divider line — gold glow ─────────────────────────────────
                 Positioned(
                   left: w * _position - 1,
                   top: 0,
@@ -71,42 +71,51 @@ class _BeforeAfterSliderState extends State<BeforeAfterSlider> {
                     width: 2,
                     height: h,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          VastraColors.goldLight.withOpacity(0.6),
+                          VastraColors.gold,
+                          VastraColors.goldLight.withOpacity(0.6),
+                        ],
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: VastraColors.purpleNeon.withOpacity(0.5),
-                          blurRadius: 8,
+                          color: VastraColors.gold.withOpacity(0.55),
+                          blurRadius: 10,
+                          spreadRadius: 1,
                         ),
                       ],
                     ),
                   ),
                 ),
 
-                // ── Handle ───────────────────────────────────────────────────
+                // ── Handle — gold medallion ──────────────────────────────────
                 Positioned(
-                  left: w * _position - 22,
-                  top: h / 2 - 22,
+                  left: w * _position - 24,
+                  top: h / 2 - 24,
                   child: Container(
-                    width: 44,
-                    height: 44,
+                    width: 48,
+                    height: 48,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white,
+                      gradient: VastraTheme.goldGradient,
                       boxShadow: [
                         BoxShadow(
-                          color: VastraColors.purpleAccent.withOpacity(0.6),
-                          blurRadius: 14,
+                          color: VastraColors.gold.withOpacity(0.55),
+                          blurRadius: 18,
                           spreadRadius: 2,
                         ),
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withOpacity(0.35),
                           blurRadius: 8,
                         ),
                       ],
                     ),
                     child: const Icon(
                       Icons.compare_arrows_rounded,
-                      color: Colors.black,
+                      color: VastraColors.textOnGold,
                       size: 22,
                     ),
                   ),
@@ -133,25 +142,25 @@ class _BeforeAfterSliderState extends State<BeforeAfterSlider> {
     );
   }
 
-  Widget _buildLabel(String text, bool isPurple) {
+  Widget _buildLabel(String text, bool isAfter) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: isPurple
-            ? VastraColors.purpleAccent.withOpacity(0.85)
-            : Colors.black.withOpacity(0.6),
+        color: isAfter
+            ? VastraColors.gold.withOpacity(0.85)
+            : Colors.black.withOpacity(0.60),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: isPurple
-              ? VastraColors.purpleNeon.withOpacity(0.5)
-              : Colors.white.withOpacity(0.15),
+          color: isAfter
+              ? VastraColors.goldLight.withOpacity(0.5)
+              : Colors.white.withOpacity(0.12),
           width: 0.5,
         ),
       ),
       child: Text(
         text,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: isAfter ? VastraColors.textOnGold : Colors.white,
           fontSize: 10,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.5,

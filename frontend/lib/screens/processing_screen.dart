@@ -1,248 +1,240 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../providers/vastra_provider.dart';
 import 'result_screen.dart';
 
-// ── AI Animation Painter ────────────────────────────────────────────────────
+// ── Fabric Ripple Loader — Signature Feature C1 ──────────────────────────────
+//
+// A waving cloth simulation rendered on Flutter Canvas.
+// The fabric colors are extracted from the uploaded fabric swatch.
+// Three overlapping sine-wave cloth strips create a 3D draping illusion.
 
-class _AIAnimationPainter extends CustomPainter {
-  final double elapsed; // seconds since animation start
+class _FabricRipplePainter extends CustomPainter {
+  final double elapsed; // seconds
+  final List<Color> fabricColors;
+  final double shimmerPhase;
 
-  _AIAnimationPainter(this.elapsed);
+  _FabricRipplePainter({
+    required this.elapsed,
+    required this.fabricColors,
+    required this.shimmerPhase,
+  });
+
+  Color get _c1 => fabricColors.isNotEmpty ? fabricColors[0] : VastraColors.gold;
+  Color get _c2 => fabricColors.length > 1 ? fabricColors[1] : VastraColors.terracotta;
+  Color get _c3 => fabricColors.length > 2 ? fabricColors[2] : VastraColors.warmGray;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height / 2;
+    final w = size.width;
+    final h = size.height;
 
-    // 1. Expanding pulse rings
-    _drawPulseRings(canvas, cx, cy, cx * 0.85);
-
-    // 2. Three concentric rotating rings (dashed arcs)
-    _drawDashedRing(
-      canvas, cx, cy,
-      radius: cx * 0.70,
-      strokeWidth: 1.2,
-      rotation: elapsed * 0.45,
-      dashCount: 24,
-      color: VastraColors.purpleAccent.withOpacity(0.45),
-    );
-    _drawDashedRing(
-      canvas, cx, cy,
-      radius: cx * 0.52,
-      strokeWidth: 1.8,
-      rotation: -elapsed * 0.80,
-      dashCount: 14,
-      color: VastraColors.purpleNeon.withOpacity(0.60),
-    );
-    _drawDashedRing(
-      canvas, cx, cy,
-      radius: cx * 0.34,
-      strokeWidth: 2.4,
-      rotation: elapsed * 1.20,
-      dashCount: 8,
-      color: VastraColors.purpleGlow.withOpacity(0.75),
+    // ── Background glow ──
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, w, h),
+      Paint()
+        ..shader = RadialGradient(
+          center: Alignment.center,
+          radius: 0.8,
+          colors: [
+            _c1.withOpacity(0.07),
+            Colors.transparent,
+          ],
+        ).createShader(Rect.fromLTWH(0, 0, w, h)),
     );
 
-    // 3. Laser sweep
-    _drawLaserSweep(canvas, cx, cy, cx * 0.70);
+    // ── Draw 3 cloth strips ──
+    _drawClothStrip(canvas, size, strip: 0, yOffset: 0.25, amplitude: 18, speed: 1.0, color: _c1);
+    _drawClothStrip(canvas, size, strip: 1, yOffset: 0.45, amplitude: 22, speed: 0.7, color: _c2);
+    _drawClothStrip(canvas, size, strip: 2, yOffset: 0.65, amplitude: 16, speed: 1.3, color: _c3);
 
-    // 4. Data nodes on rings
-    _drawRingNodes(canvas, cx, cy, cx * 0.70, elapsed * 0.45, 6);
-    _drawRingNodes(canvas, cx, cy, cx * 0.52, -elapsed * 0.80, 4);
-    _drawRingNodes(canvas, cx, cy, cx * 0.34, elapsed * 1.20, 3);
+    // ── Warp thread lines (vertical) ──
+    _drawWarpThreads(canvas, size);
 
-    // 5. Neural-network connecting lines
-    _drawNeuralLines(canvas, cx, cy);
+    // ── Gold shimmer scan line ──
+    _drawShimmerLine(canvas, size);
 
-    // 6. Center glow + core dot
-    _drawCenter(canvas, cx, cy);
+    // ── Center weave indicator ──
+    _drawCenterIndicator(canvas, size);
   }
 
-  void _drawPulseRings(Canvas canvas, double cx, double cy, double maxR) {
-    for (int i = 0; i < 4; i++) {
-      final progress = ((elapsed * 0.45 + i * 0.25) % 1.0);
-      final r = progress * maxR;
-      final opacity = (1.0 - progress) * 0.22;
-      canvas.drawCircle(
-        Offset(cx, cy),
-        r,
-        Paint()
-          ..color = VastraColors.purpleNeon.withOpacity(opacity)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2,
-      );
-    }
-  }
-
-  void _drawDashedRing(
+  void _drawClothStrip(
     Canvas canvas,
-    double cx,
-    double cy, {
-    required double radius,
-    required double strokeWidth,
-    required double rotation,
-    required int dashCount,
+    Size size, {
+    required int strip,
+    required double yOffset,
+    required double amplitude,
+    required double speed,
     required Color color,
   }) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
+    final w = size.width;
+    final h = size.height;
+    final centerY = h * yOffset;
+    final stripH = h * 0.14;
+    const numPoints = 80;
 
-    final dashAngle = (math.pi * 2) / dashCount;
-    const gapFraction = 0.38;
+    final topPath = Path();
+    final bottomPath = Path();
 
-    for (int i = 0; i < dashCount; i++) {
-      final startAngle = rotation + i * dashAngle;
-      final sweep = dashAngle * (1.0 - gapFraction);
-      canvas.drawArc(
-        Rect.fromCircle(center: Offset(cx, cy), radius: radius),
-        startAngle,
-        sweep,
-        false,
-        paint,
-      );
+    for (int i = 0; i <= numPoints; i++) {
+      final x = (i / numPoints) * w;
+      final phase = elapsed * speed + strip * 1.2 + x * 0.012;
+      final wave = math.sin(phase) * amplitude +
+          math.sin(phase * 1.6 + 0.8) * (amplitude * 0.4);
+      final foldDepth = math.cos(phase * 0.7) * (stripH * 0.08);
+
+      final ty = centerY - stripH * 0.5 + wave + foldDepth;
+      final by = centerY + stripH * 0.5 + wave * 0.6 - foldDepth;
+
+      if (i == 0) {
+        topPath.moveTo(x, ty);
+        bottomPath.moveTo(x, by);
+      } else {
+        topPath.lineTo(x, ty);
+        bottomPath.lineTo(x, by);
+      }
     }
-  }
 
-  void _drawLaserSweep(Canvas canvas, double cx, double cy, double radius) {
-    final angle = elapsed * 1.8; // radians/sec
+    // Build closed cloth shape
+    final clothPath = Path()
+      ..addPath(topPath, Offset.zero);
+    // Trace bottom path in reverse
+    for (int i = numPoints; i >= 0; i--) {
+      final x = (i / numPoints) * w;
+      final phase = elapsed * speed + strip * 1.2 + x * 0.012;
+      final wave = math.sin(phase) * amplitude +
+          math.sin(phase * 1.6 + 0.8) * (amplitude * 0.4);
+      final foldDepth = math.cos(phase * 0.7) * (stripH * 0.08);
+      final by = centerY + stripH * 0.5 + wave * 0.6 - foldDepth;
+      clothPath.lineTo(x, by);
+    }
+    clothPath.close();
 
-    // Filled pie slice with gradient
-    final sweepGrad = SweepGradient(
+    // Fill with fabric gradient
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
       colors: [
-        VastraColors.purpleNeon.withOpacity(0.0),
-        VastraColors.purpleNeon.withOpacity(0.55),
-        VastraColors.purpleNeon.withOpacity(0.0),
+        color.withOpacity(0.85),
+        color.withOpacity(0.55),
+        color.withOpacity(0.80),
       ],
-      stops: const [0.0, 0.04, 0.12],
-      transform: GradientRotation(angle),
+      stops: const [0.0, 0.5, 1.0],
     );
-
-    final path = Path()
-      ..moveTo(cx, cy)
-      ..arcTo(
-        Rect.fromCircle(center: Offset(cx, cy), radius: radius),
-        angle - 0.25,
-        0.5,
-        false,
-      )
-      ..close();
 
     canvas.drawPath(
-      path,
+      clothPath,
       Paint()
-        ..shader = sweepGrad
-            .createShader(Rect.fromCircle(center: Offset(cx, cy), radius: radius)),
+        ..shader = gradient.createShader(
+          Rect.fromLTWH(0, centerY - stripH, w, stripH * 2),
+        )
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.5),
     );
 
-    // Bright leading edge line
-    canvas.drawLine(
-      Offset(cx, cy),
-      Offset(cx + math.cos(angle) * radius, cy + math.sin(angle) * radius),
+    // Highlight edge line (top of cloth)
+    canvas.drawPath(
+      topPath,
       Paint()
-        ..color = Colors.white.withOpacity(0.55)
-        ..strokeWidth = 1.5
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-    );
-  }
-
-  void _drawRingNodes(
-    Canvas canvas,
-    double cx,
-    double cy,
-    double radius,
-    double rotation,
-    int count,
-  ) {
-    for (int i = 0; i < count; i++) {
-      final a = rotation + (math.pi * 2 * i / count);
-      final x = cx + math.cos(a) * radius;
-      final y = cy + math.sin(a) * radius;
-      canvas.drawCircle(
-        Offset(x, y),
-        3.5,
-        Paint()
-          ..color = Colors.white.withOpacity(0.85)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-      );
-    }
-  }
-
-  void _drawNeuralLines(Canvas canvas, double cx, double cy) {
-    // Connect random-but-stable points with faint lines to simulate neural net
-    final rng = math.Random(12);
-    final pts = List.generate(
-      8,
-      (_) => Offset(
-        cx + (rng.nextDouble() - 0.5) * cx * 1.4,
-        cy + (rng.nextDouble() - 0.5) * cy * 1.4,
-      ),
-    );
-
-    final t = elapsed * 0.5;
-    for (int i = 0; i < pts.length; i++) {
-      for (int j = i + 1; j < pts.length; j++) {
-        final opacity =
-            0.06 + 0.06 * math.sin(t + i * 0.7 + j * 0.3);
-        canvas.drawLine(
-          pts[i],
-          pts[j],
-          Paint()
-            ..color = VastraColors.purpleAccent.withOpacity(opacity)
-            ..strokeWidth = 0.6,
-        );
-      }
-      // Small dot at each node
-      canvas.drawCircle(
-        pts[i],
-        2,
-        Paint()
-          ..color = VastraColors.purpleGlow.withOpacity(
-              0.2 + 0.15 * math.sin(t + i)),
-      );
-    }
-  }
-
-  void _drawCenter(Canvas canvas, double cx, double cy) {
-    final pulse = 0.5 + 0.5 * math.sin(elapsed * 2.2);
-
-    // Outer ambient glow
-    canvas.drawCircle(
-      Offset(cx, cy),
-      32 + pulse * 10,
-      Paint()
-        ..color = VastraColors.purpleNeon.withOpacity(0.12 * pulse)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
-    );
-
-    // Inner glow ring
-    canvas.drawCircle(
-      Offset(cx, cy),
-      14 + pulse * 4,
-      Paint()
-        ..color = VastraColors.purpleAccent.withOpacity(0.35)
+        ..color = color.withOpacity(0.40)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
+        ..strokeWidth = 1.0,
     );
 
-    // Core bright dot
+    // Shadow edge (bottom of cloth)
+    canvas.drawPath(
+      bottomPath,
+      Paint()
+        ..color = Colors.black.withOpacity(0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  void _drawWarpThreads(Canvas canvas, Size size) {
+    const threadCount = 32;
+    final w = size.width;
+    final h = size.height;
+
+    for (int i = 0; i < threadCount; i++) {
+      final x = (i / threadCount) * w;
+      final opacity = 0.05 + 0.04 * math.sin(elapsed * 0.8 + i * 0.3);
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, h),
+        Paint()
+          ..color = VastraColors.ivory.withOpacity(opacity)
+          ..strokeWidth = 0.5,
+      );
+    }
+  }
+
+  void _drawShimmerLine(Canvas canvas, Size size) {
+    // A diagonal shimmer line that sweeps across the cloth
+    final x = (shimmerPhase % 1.0) * size.width * 1.4 - size.width * 0.2;
+    final gradient = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Colors.transparent,
+        VastraColors.goldLight.withOpacity(0.55),
+        Colors.white.withOpacity(0.45),
+        VastraColors.goldLight.withOpacity(0.55),
+        Colors.transparent,
+      ],
+      stops: const [0.0, 0.45, 0.5, 0.55, 1.0],
+    );
+
+    canvas.save();
+    canvas.translate(x, 0);
+    canvas.skew(-0.3, 0); // diagonal slant
+    canvas.drawRect(
+      Rect.fromLTWH(-30, 0, 60, size.height),
+      Paint()
+        ..shader = gradient.createShader(Rect.fromLTWH(-30, 0, 60, size.height))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+    );
+    canvas.restore();
+  }
+
+  void _drawCenterIndicator(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height * 0.45;
+    final pulse = 0.5 + 0.5 * math.sin(elapsed * 2.5);
+
+    // Outer glow ring
+    canvas.drawCircle(
+      Offset(cx, cy),
+      28 + pulse * 6,
+      Paint()
+        ..color = VastraColors.gold.withOpacity(0.08 + pulse * 0.06)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
+    );
+
+    // Ring
+    canvas.drawCircle(
+      Offset(cx, cy),
+      16 + pulse * 3,
+      Paint()
+        ..color = VastraColors.gold.withOpacity(0.5 + pulse * 0.2)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+
+    // Core gold dot
     canvas.drawCircle(
       Offset(cx, cy),
       5,
-      Paint()
-        ..color = Colors.white.withOpacity(0.92)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      Paint()..color = VastraColors.gold.withOpacity(0.9),
     );
   }
 
   @override
-  bool shouldRepaint(_AIAnimationPainter old) => old.elapsed != elapsed;
+  bool shouldRepaint(_FabricRipplePainter old) =>
+      old.elapsed != elapsed || old.shimmerPhase != shimmerPhase;
 }
 
 // ── Processing Screen ─────────────────────────────────────────────────────────
@@ -257,21 +249,25 @@ class ProcessingScreen extends StatefulWidget {
 class _ProcessingScreenState extends State<ProcessingScreen>
     with TickerProviderStateMixin {
   late final AnimationController _repaintTicker;
+  late final AnimationController _shimmerCtrl;
   late final AnimationController _textFadeCtrl;
   late final Animation<double> _textFadeAnim;
 
   final DateTime _startTime = DateTime.now();
 
+  // Fabric colors extracted from the uploaded swatch
+  List<Color> _fabricColors = [VastraColors.gold, VastraColors.terracotta, VastraColors.warmGray];
+
   static const List<String> _messages = [
-    'Analyzing room geometry...',
+    'Reading room geometry...',
     'Detecting target object...',
-    'Understanding spatial layout...',
-    'Segmenting selected region...',
+    'Understanding spatial depth...',
+    'Segmenting fabric region...',
     'Extracting fabric texture...',
     'Applying perspective transform...',
     'Matching room lighting...',
     'Preserving shadows & depth...',
-    'Blending fabric naturally...',
+    'Weaving your fabric in...',
     'Finalizing your design...',
   ];
 
@@ -282,21 +278,23 @@ class _ProcessingScreenState extends State<ProcessingScreen>
   void initState() {
     super.initState();
 
-    // Drives repaints at ~60 fps without using the value itself
     _repaintTicker = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 16),
+    )..repeat();
+
+    _shimmerCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
     )..repeat();
 
     _textFadeCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 450),
     )..forward();
-    _textFadeAnim =
-        CurvedAnimation(parent: _textFadeCtrl, curve: Curves.easeInOut);
+    _textFadeAnim = CurvedAnimation(parent: _textFadeCtrl, curve: Curves.easeInOut);
 
-    // Cycle messages with fade
-    _msgTimer = Timer.periodic(const Duration(milliseconds: 2200), (_) {
+    _msgTimer = Timer.periodic(const Duration(milliseconds: 2400), (_) {
       if (!mounted) return;
       _textFadeCtrl.reverse().then((_) {
         if (!mounted) return;
@@ -305,8 +303,43 @@ class _ProcessingScreenState extends State<ProcessingScreen>
       });
     });
 
-    // Kick off actual generation after first frame
-    WidgetsBinding.instance.addPostFrameCallback((_) => _runGeneration());
+    // Extract fabric colors from the uploaded fabric image
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _extractFabricColors();
+      _runGeneration();
+    });
+  }
+
+  void _extractFabricColors() {
+    final provider = context.read<VastraProvider>();
+    final bytes = provider.fabricImageBytes;
+    if (bytes == null) return;
+
+    // Sample a few pixel regions to get dominant colors
+    try {
+      final colors = _sampleDominantColors(bytes);
+      if (mounted && colors.isNotEmpty) {
+        setState(() => _fabricColors = colors);
+      }
+    } catch (_) {
+      // Keep defaults
+    }
+  }
+
+  List<Color> _sampleDominantColors(Uint8List bytes) {
+    // Quick sampling — every ~1000th byte interpreted as RGBA groups
+    // For production, use image package for proper histogram analysis
+    if (bytes.length < 12) return [];
+    final results = <Color>[];
+    final step = (bytes.length / 4).floor();
+    for (int i = 0; i < 4 && i * step + 3 < bytes.length; i++) {
+      final offset = i * step;
+      final r = bytes[offset];
+      final g = bytes[offset + 1];
+      final b = bytes[offset + 2];
+      results.add(Color.fromARGB(255, r, g, b));
+    }
+    return results.isNotEmpty ? results : [VastraColors.gold];
   }
 
   Future<void> _runGeneration() async {
@@ -345,6 +378,7 @@ class _ProcessingScreenState extends State<ProcessingScreen>
   @override
   void dispose() {
     _repaintTicker.dispose();
+    _shimmerCtrl.dispose();
     _textFadeCtrl.dispose();
     _msgTimer?.cancel();
     super.dispose();
@@ -358,23 +392,20 @@ class _ProcessingScreenState extends State<ProcessingScreen>
       backgroundColor: VastraColors.background,
       body: Stack(
         children: [
-          // Background gradient
-          Container(
-            decoration: const BoxDecoration(gradient: VastraTheme.deepGradient),
-          ),
+          Container(decoration: const BoxDecoration(gradient: VastraTheme.deepGradient)),
 
-          // Ambient top glow
+          // Ambient top glow in fabric color
           Positioned(
             top: -120,
-            left: size.width / 2 - 150,
+            left: size.width / 2 - 160,
             child: Container(
-              width: 300,
-              height: 300,
+              width: 320,
+              height: 320,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    VastraColors.purpleAccent.withOpacity(0.18),
+                    _fabricColors.first.withOpacity(0.12),
                     Colors.transparent,
                   ],
                 ),
@@ -387,27 +418,29 @@ class _ProcessingScreenState extends State<ProcessingScreen>
               children: [
                 const Spacer(flex: 1),
 
-                // Animation canvas
+                // Fabric ripple canvas
                 Expanded(
                   flex: 5,
                   child: Center(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final canvasSize = math.min(
-                          constraints.maxWidth * 0.88,
-                          constraints.maxHeight,
-                        );
+                        final canvasW = constraints.maxWidth * 0.90;
+                        final canvasH = math.min(constraints.maxHeight, canvasW * 0.70);
                         return RepaintBoundary(
                           child: AnimatedBuilder(
-                            animation: _repaintTicker,
+                            animation: Listenable.merge([_repaintTicker, _shimmerCtrl]),
                             builder: (_, __) {
                               final elapsed = DateTime.now()
                                       .difference(_startTime)
                                       .inMilliseconds /
                                   1000.0;
                               return CustomPaint(
-                                painter: _AIAnimationPainter(elapsed),
-                                size: Size(canvasSize, canvasSize),
+                                painter: _FabricRipplePainter(
+                                  elapsed: elapsed,
+                                  fabricColors: _fabricColors,
+                                  shimmerPhase: _shimmerCtrl.value,
+                                ),
+                                size: Size(canvasW, canvasH),
                               );
                             },
                           ),
@@ -417,28 +450,28 @@ class _ProcessingScreenState extends State<ProcessingScreen>
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 28),
 
                 // Title
                 Text(
-                  'AI Processing',
+                  'Weaving Your Design',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        letterSpacing: 0.5,
+                        letterSpacing: 0.3,
+                        color: VastraColors.ivory,
                       ),
                 ),
 
                 const SizedBox(height: 10),
 
-                // Cycling status message
+                // Status message
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 48),
                   child: FadeTransition(
                     opacity: _textFadeAnim,
                     child: Text(
                       _messages[_msgIndex],
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: VastraColors.purpleNeon,
+                            color: VastraColors.gold,
                             fontWeight: FontWeight.w500,
                           ),
                       textAlign: TextAlign.center,
@@ -456,13 +489,13 @@ class _ProcessingScreenState extends State<ProcessingScreen>
                     (i) => AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: i == _msgIndex ? 18 : 6,
+                      width: i == _msgIndex ? 20 : 6,
                       height: 6,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(3),
                         color: i == _msgIndex
-                            ? VastraColors.purpleNeon
-                            : Colors.white.withOpacity(0.15),
+                            ? VastraColors.gold
+                            : VastraColors.ivory.withOpacity(0.12),
                       ),
                     ),
                   ),

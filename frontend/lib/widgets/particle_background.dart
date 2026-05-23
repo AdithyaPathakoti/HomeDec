@@ -23,22 +23,23 @@ class _Particle {
   });
 
   factory _Particle.random(math.Random rng) {
-    const colors = [
-      VastraColors.purpleAccent,
-      VastraColors.purpleNeon,
-      VastraColors.purpleGlow,
-      VastraColors.indigo,
+    final colors = [
+      VastraColors.gold,
+      VastraColors.terracotta,
+      VastraColors.warmGray,
+      VastraColors.goldLight,
     ];
     return _Particle(
       startX: rng.nextDouble(),
       startY: rng.nextDouble(),
       speed: 0.025 + rng.nextDouble() * 0.045,
       size: 1.0 + rng.nextDouble() * 2.2,
-      opacity: 0.12 + rng.nextDouble() * 0.38,
+      opacity: 0.06 + rng.nextDouble() * 0.18,
       phase: rng.nextDouble() * math.pi * 2,
       color: colors[rng.nextInt(colors.length)],
     );
   }
+
 }
 
 // ── Custom Painter ─────────────────────────────────────────────────────────────

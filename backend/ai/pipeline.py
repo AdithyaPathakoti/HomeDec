@@ -770,8 +770,6 @@ class VastraPipeline:
             depth_map = (depth_map - d_min) / (d_max - d_min)
         return depth_map
 
-    # ── Stage 5: Fabric Extraction & True 3D Triplanar Wrapping ──
-
     def _warp_and_tile_fabric(
         self,
         fabric_pil: Image.Image,
@@ -783,10 +781,10 @@ class VastraPipeline:
         product_category: str,
     ) -> Image.Image:
         """
-        True 3D Triplanar Texture Projection Engine.
-        Uses depth map to reconstruct 3D points in world space and projects
-        texture along Y, X, and Z axes based on sharp normal-based weights.
-        Prevents all pattern stretching and yields realistic folds.
+        Centered Perspective-Correct Coordinate Mapping.
+        Centers the coordinate grid around the bounding box center and scales based
+        on a heavily Gaussian-smoothed MiDaS depth map. This ensures realistic
+        recession into the background with zero high-frequency pixel noise.
         """
         if mask_np.sum() == 0:
             return fabric_pil.resize((room_w, room_h))
@@ -795,119 +793,67 @@ class VastraPipeline:
         fabric_np = np.array(fabric_pil.convert("RGB"), dtype=np.uint8)
         fw, fh = fabric_np.shape[1], fabric_np.shape[0]
 
-        # ── Step 1: Reconstruct 3D points in Camera Space ──
-        Z_c = 3.5 / (depth_map + 0.15)
-        f = float(w)
-        x_indices, y_indices = np.meshgrid(np.arange(w), np.arange(h))
-        X_c = (x_indices - w / 2.0) * Z_c / f
-        Y_c = (y_indices - h / 2.0) * Z_c / f
-
-        # ── Step 2: Pitch-Compensated World Space Rotation ──
-        # Assume camera pitch theta = 22.0 degrees looking slightly downward
-        theta = np.radians(22.0)
-        cos_t, sin_t = np.cos(theta), np.sin(theta)
+        # 1. Smooth the depth map heavily to eliminate high-frequency noise
+        depth_smooth = cv2.GaussianBlur(depth_map.astype(np.float32), (51, 51), 0)
         
-        X_w = X_c
-        Y_w = Y_c * cos_t - Z_c * sin_t
-        Z_w = Y_c * sin_t + Z_c * cos_t
-
-        # ── Step 3: Compute World-Space Surface Normals ──
-        dX_wx = cv2.Sobel(X_w.astype(np.float32), cv2.CV_32F, 1, 0, ksize=3)
-        dY_wx = cv2.Sobel(Y_w.astype(np.float32), cv2.CV_32F, 1, 0, ksize=3)
-        dZ_wx = cv2.Sobel(Z_w.astype(np.float32), cv2.CV_32F, 1, 0, ksize=3)
-        
-        dX_wy = cv2.Sobel(X_w.astype(np.float32), cv2.CV_32F, 0, 1, ksize=3)
-        dY_wy = cv2.Sobel(Y_w.astype(np.float32), cv2.CV_32F, 0, 1, ksize=3)
-        dZ_wy = cv2.Sobel(Z_w.astype(np.float32), cv2.CV_32F, 0, 1, ksize=3)
-
-        nx = dY_wx * dZ_wy - dZ_wx * dY_wy
-        ny = dZ_wx * dX_wy - dX_wx * dZ_wy
-        nz = dX_wx * dY_wy - dY_wx * dX_wy
-        
-        norm = np.sqrt(nx**2 + ny**2 + nz**2) + 1e-6
-        nx /= norm
-        ny /= norm
-        nz /= norm
-
-        nx = cv2.GaussianBlur(nx, (7, 7), 0)
-        ny = cv2.GaussianBlur(ny, (7, 7), 0)
-        nz = cv2.GaussianBlur(nz, (7, 7), 0)
-
-        # ── Step 4: Local Wrinkle and Crease Displacement ──
-        depth_blur = cv2.GaussianBlur(depth_map.astype(np.float32), (25, 25), 0)
-        depth_creases = depth_map - depth_blur
-        
-        crease_dx = cv2.Sobel(depth_creases, cv2.CV_32F, 1, 0, ksize=3)
-        crease_dy = cv2.Sobel(depth_creases, cv2.CV_32F, 0, 1, ksize=3)
-        crease_norm = np.sqrt(crease_dx**2 + crease_dy**2) + 1e-5
-        
-        disp_strength = 0.12 if product_category in ["bedsheets", "sofa_covers"] else 0.06
-        if product_category == "curtains":
-            disp_strength = 0.18
+        # Normalize depth_smooth to [0.1, 1.0] to prevent zero division
+        d_min, d_max = depth_smooth.min(), depth_smooth.max()
+        if d_max > d_min:
+            depth_norm = (depth_smooth - d_min) / (d_max - d_min)
+        else:
+            depth_norm = np.ones_like(depth_smooth)
             
-        X_w = X_w + (crease_dx / crease_norm) * depth_creases * disp_strength
-        Z_w = Z_w + (crease_dy / crease_norm) * depth_creases * disp_strength
-
-        # ── Step 5: Triplanar Mapping Coordinates Sampling ──
-        scale = 650.0
-        if product_category == "carpets":
-            scale = 450.0
-        elif product_category == "curtains":
-            scale = 800.0
-        elif product_category == "pillows":
-            scale = 1200.0
-
-        map_u_y = (X_w * scale) % fw
-        map_v_y = (Z_w * scale) % fh
-
-        map_u_x = (Z_w * scale) % fw
-        map_v_x = (Y_w * scale) % fh
-
-        map_u_z = (X_w * scale) % fw
-        map_v_z = (Y_w * scale) % fh
-
-        sampled_y = cv2.remap(
-            fabric_np,
-            map_u_y.astype(np.float32),
-            map_v_y.astype(np.float32),
-            interpolation=cv2.INTER_LANCZOS4,
-            borderMode=cv2.BORDER_REPLICATE
-        )
-
-        sampled_x = cv2.remap(
-            fabric_np,
-            map_u_x.astype(np.float32),
-            map_v_x.astype(np.float32),
-            interpolation=cv2.INTER_LANCZOS4,
-            borderMode=cv2.BORDER_REPLICATE
-        )
-
-        sampled_z = cv2.remap(
-            fabric_np,
-            map_u_z.astype(np.float32),
-            map_v_z.astype(np.float32),
-            interpolation=cv2.INTER_LANCZOS4,
-            borderMode=cv2.BORDER_REPLICATE
-        )
-
-        # ── Step 6: Sharp Normal-Based Weight Blending ──
-        alpha = 8.0
-        wx = np.abs(nx) ** alpha
-        wy = np.abs(ny) ** alpha
-        wz = np.abs(nz) ** alpha
+        # Map normalized depth to local scale range [0.4, 1.2]
+        # Closer (higher depth_norm) -> larger local_scale -> larger fabric pattern size
+        # Further (lower depth_norm) -> smaller local_scale -> smaller fabric pattern size
+        local_scale = depth_norm * 0.8 + 0.4
         
-        w_sum = wx + wy + wz + 1e-6
-        wx /= w_sum
-        wy /= w_sum
-        wz /= w_sum
+        # Configure category-specific base scaling
+        base_scale = 1.0
+        if product_category == "bedsheets":
+            base_scale = 0.70
+        elif product_category == "curtains":
+            base_scale = 1.10
+        elif product_category == "sofa_covers":
+            base_scale = 0.90
+        elif product_category == "pillows":
+            base_scale = 1.80
+        elif product_category == "carpets":
+            base_scale = 0.50
 
-        triplanar_blended = (
-            sampled_x * wx[:, :, np.newaxis] +
-            sampled_y * wy[:, :, np.newaxis] +
-            sampled_z * wz[:, :, np.newaxis]
+        # 2. Centered texture coordinates around the bounding box center (cx, cy)
+        if bbox is not None:
+            bx1, by1, bx2, by2 = bbox
+            cx = (bx1 + bx2) / 2.0
+            cy = (by1 + by2) / 2.0
+        else:
+            cx = w / 2.0
+            cy = h / 2.0
+
+        # Generate pixel grid coordinates
+        x_indices, y_indices = np.meshgrid(np.arange(w), np.arange(h))
+        dx = x_indices - cx
+        dy = y_indices - cy
+
+        # Map pixel coordinates to texture coordinates using smooth depth
+        tile_ref = 256.0
+        map_u = (dx / (local_scale * base_scale)) * (fw / tile_ref) + (fw / 2.0)
+        map_v = (dy / (local_scale * base_scale)) * (fh / tile_ref) + (fh / 2.0)
+
+        # Seamless tiling wrap
+        map_u = map_u % fw
+        map_v = map_v % fh
+
+        # Remap the fabric texture to room screen space
+        remapped = cv2.remap(
+            fabric_np,
+            map_u.astype(np.float32),
+            map_v.astype(np.float32),
+            interpolation=cv2.INTER_LANCZOS4,
+            borderMode=cv2.BORDER_REPLICATE
         )
 
-        return Image.fromarray(np.clip(triplanar_blended, 0, 255).astype(np.uint8), "RGB")
+        return Image.fromarray(remapped, "RGB")
 
     def _apply_displacement_map(
         self,
@@ -919,7 +865,7 @@ class VastraPipeline:
         ny: np.ndarray,
         category: str,
     ) -> np.ndarray:
-        """Pass-through as Triplanar warping already integrates 3D displacement."""
+        """Pass-through as our perspective texture mapping and shading handles alignment."""
         return fabric_np
 
     # ── Stage 7: Print-Free Joint Bilateral Shading & Lighting Transfer ──
@@ -931,106 +877,45 @@ class VastraPipeline:
         mask_np: np.ndarray,
     ) -> np.ndarray:
         """
-        Advanced print-free Joint Bilateral Lighting Transfer.
-        Filters out original print patterns from room_np to prevent pattern ghosting,
-        and combines with synthetic Lambertian diffuse shading.
+        Guided-Filter Print-Erase Shading Transfer.
+        Extracts original lighting gradients and shadow structures without print patterns,
+        then multiplies onto fabric texture and overlays fine-scale gray wrinkles.
         """
         h, w = room_np.shape[:2]
-        mask_float = mask_np.astype(np.float32) / 255.0
-
+        
+        # Convert original image to grayscale
         room_gray = (
             0.299 * room_np[:, :, 0]
             + 0.587 * room_np[:, :, 1]
             + 0.114 * room_np[:, :, 2]
         ).astype(np.uint8)
 
-        # ── Step 1: Print Pattern Erasing via Large-Scale Guided Filter ──
-        I = room_gray.astype(np.float32) / 255.0
-        p = room_gray.astype(np.float32) / 255.0
-        r_val = 18
-        eps_val = 0.08
-        
-        mean_I = cv2.blur(I, (r_val, r_val))
-        mean_p = cv2.blur(p, (r_val, r_val))
-        mean_Ip = cv2.blur(I * p, (r_val, r_val))
-        cov_Ip = mean_Ip - mean_I * mean_p
-        mean_II = cv2.blur(I * I, (r_val, r_val))
-        var_I = mean_II - mean_I * mean_I
-        a = cov_Ip / (var_I + eps_val)
-        b = mean_p - a * mean_I
-        mean_a = cv2.blur(a, (r_val, r_val))
-        mean_b = cv2.blur(b, (r_val, r_val))
-        room_smooth_gray = (mean_a * I + mean_b) * 255.0
+        # Smooth grayscale using guided filter to erase original patterns while preserving fold edges
+        room_smooth_gray = self._guided_filter(room_gray, room_gray, r=16, eps=0.06)
 
-        room_blur = cv2.GaussianBlur(room_smooth_gray, (35, 35), 0)
-        details = room_smooth_gray - room_blur
+        # High-frequency wrinkle details (difference of original gray and smoothed gray)
+        details = room_gray.astype(np.float32) - room_smooth_gray.astype(np.float32)
 
-        # ── Step 2: Lambertian Diffuse Shading from World Normals ──
-        depth_map = self._estimate_midas_depth(room_np.astype(np.uint8))
-        Z_c = 3.5 / (depth_map + 0.15)
-        f = float(w)
-        x_indices, y_indices = np.meshgrid(np.arange(w), np.arange(h))
-        X_c = (x_indices - w / 2.0) * Z_c / f
-        Y_c = (y_indices - h / 2.0) * Z_c / f
-        
-        theta = np.radians(22.0)
-        cos_t, sin_t = np.cos(theta), np.sin(theta)
-        X_w = X_c
-        Y_w = Y_c * cos_t - Z_c * sin_t
-        Z_w = Y_c * sin_t + Z_c * cos_t
-
-        dX_wx = cv2.Sobel(X_w.astype(np.float32), cv2.CV_32F, 1, 0, ksize=3)
-        dY_wx = cv2.Sobel(Y_w.astype(np.float32), cv2.CV_32F, 1, 0, ksize=3)
-        dZ_wx = cv2.Sobel(Z_w.astype(np.float32), cv2.CV_32F, 1, 0, ksize=3)
-        dX_wy = cv2.Sobel(X_w.astype(np.float32), cv2.CV_32F, 0, 1, ksize=3)
-        dY_wy = cv2.Sobel(Y_w.astype(np.float32), cv2.CV_32F, 0, 1, ksize=3)
-        dZ_wy = cv2.Sobel(Z_w.astype(np.float32), cv2.CV_32F, 0, 1, ksize=3)
-        
-        nx = dY_wx * dZ_wy - dZ_wx * dY_wy
-        ny = dZ_wx * dX_wy - dX_wx * dZ_wy
-        nz = dX_wx * dY_wy - dY_wx * dX_wy
-        norm = np.sqrt(nx**2 + ny**2 + nz**2) + 1e-6
-        nx /= norm
-        ny /= norm
-        nz /= norm
-
-        L = np.array([0.5, 0.4, 0.76], dtype=np.float32)
-        L /= np.linalg.norm(L)
-        
-        diffuse = nx * L[0] + ny * L[1] + nz * L[2]
-        diffuse_normalized = (diffuse - diffuse.min()) / (diffuse.max() - diffuse.min() + 1e-5)
-        diffuse_shading = 0.45 + 0.85 * diffuse_normalized
-
-        # ── Step 3: Color Cast Inheritance ──
-        room_low_color = cv2.GaussianBlur(room_np, (51, 51), 0)
-        masked_low_color = room_low_color[mask_float > 0.1]
-        if len(masked_low_color) > 0:
-            avg_low_color = np.mean(masked_low_color, axis=0)
-            avg_low_color = np.clip(avg_low_color, 10.0, 255.0)
-            color_cast = room_low_color / avg_low_color
-            color_cast = np.clip(color_cast, 0.70, 1.30)
+        # Compute reference base brightness of the fabric in the original image (within the mask)
+        masked_pixels = room_smooth_gray[mask_np > 50]
+        if len(masked_pixels) > 0:
+            ref_brightness = np.percentile(masked_pixels, 75)
+            ref_brightness = np.clip(ref_brightness, 80.0, 220.0)
         else:
-            color_cast = np.ones((h, w, 3), dtype=np.float32)
+            ref_brightness = 180.0
 
-        # ── Step 4: Combine Everything ──
-        masked_lumi = room_smooth_gray[mask_float > 0.1]
-        ref_brightness = float(np.percentile(masked_lumi, 75)) if len(masked_lumi) else 180.0
-        ref_brightness = np.clip(ref_brightness, 90.0, 210.0)
-        ambient_shading = (room_blur + 15.0) / (ref_brightness + 15.0)
-        ambient_shading = np.clip(ambient_shading, 0.20, 1.30)
+        # Shading factor
+        shading_factor = room_smooth_gray.astype(np.float32) / ref_brightness
+        shading_factor = np.clip(shading_factor, 0.20, 1.40)
 
-        combined_shading = ambient_shading * 0.45 + diffuse_shading * 0.55
-        blended = fabric_np * combined_shading[:, :, np.newaxis] * color_cast
+        # Apply shading factor to the mapped fabric
+        blended = fabric_np.astype(np.float32) * shading_factor[:, :, np.newaxis]
 
-        shadows = np.minimum(details, 0.0)
-        highlights = np.maximum(details, 0.0)
+        # Add back high-frequency wrinkle/crease details
+        wrinkle_strength = 0.85
+        blended = blended + details[:, :, np.newaxis] * wrinkle_strength
 
-        shadows_blend = 1.0 + (shadows / 128.0) * 0.40
-        shadows_blend = np.clip(shadows_blend, 0.35, 1.0)
-        
-        blended = blended * shadows_blend[:, :, np.newaxis]
-        blended = blended + highlights[:, :, np.newaxis] * 0.65
-
+        # Clip and return uint8
         return np.clip(blended, 0, 255).astype(np.uint8)
 
     # ── Stage 9: Quality Validation & Heal Audit Layer ──
