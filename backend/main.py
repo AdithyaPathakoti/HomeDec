@@ -27,7 +27,7 @@ print(f"[Vastra] Hardware device: {DEVICE}")
 
 # ── Lazy-loaded model singletons ───────────────────────────────────────────────
 _yolo_model = None
-_fastsam_model = None
+_pipeline = None
 
 
 def get_yolo():
@@ -40,14 +40,12 @@ def get_yolo():
     return _yolo_model
 
 
-def get_fastsam():
-    global _fastsam_model
-    if _fastsam_model is None:
-        from ultralytics import FastSAM
-        print("[Vastra] Loading FastSAM-s...")
-        _fastsam_model = FastSAM("FastSAM-s.pt")
-        print("[Vastra] FastSAM-s ready.")
-    return _fastsam_model
+def get_pipeline():
+    global _pipeline
+    if _pipeline is None:
+        print("[Vastra] Initializing VastraPipeline singleton...")
+        _pipeline = VastraPipeline(yolo_model=get_yolo(), device=DEVICE)
+    return _pipeline
 
 
 # ── App ────────────────────────────────────────────────────────────────────────
@@ -71,8 +69,9 @@ ensure_dirs(["uploads", "outputs"])
 @app.on_event("startup")
 def startup_event():
     print("[Vastra] Pre-loading AI models on startup...")
-    get_yolo()
-    get_fastsam()
+    pipeline = get_pipeline()
+    pipeline._get_fastsam()
+    pipeline._load_depth_model()
     print("[Vastra] All models loaded. Ready to serve.")
 
 
@@ -130,11 +129,7 @@ async def vastra_generate(
         )
 
         # Run the pipeline
-        pipeline = VastraPipeline(
-            yolo_model=get_yolo(),
-            fastsam_model=get_fastsam(),
-            device=DEVICE,
-        )
+        pipeline = get_pipeline()
         result_pil = pipeline.process(room_pil, product_category, fabric_pil)
 
         # Serialize result as PNG bytes
