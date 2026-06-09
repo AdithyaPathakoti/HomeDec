@@ -8,6 +8,6 @@ numpy
 opencv-python
 pydantic
 python-dotenv
-ultralytics
 gradio_client
 timm
+sam2

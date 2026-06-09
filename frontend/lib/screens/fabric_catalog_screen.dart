@@ -9,7 +9,7 @@ import '../core/constants.dart';
 import '../models/fabric_item.dart';
 import '../providers/vastra_provider.dart';
 import '../providers/fabric_catalog_provider.dart';
-import 'processing_screen.dart';
+import 'result_screen.dart';
 
 class FabricCatalogScreen extends StatefulWidget {
   const FabricCatalogScreen({super.key});
@@ -78,19 +78,73 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
     }
   }
 
-  void _onVisualize() {
+  Future<void> _onVisualize() async {
     if (_selectedFabric == null) return;
     final provider = context.read<VastraProvider>();
-    if (provider.fabricImageBytes == null) return;
 
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const ProcessingScreen(),
-        transitionDuration: VastraConstants.animationSlow,
-        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
-      ),
+    // Show visual loading dialog while rendering
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: Dialog(
+            backgroundColor: VastraColors.surfaceCard,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(color: VastraColors.gold),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Rendering fabric projection...',
+                    style: TextStyle(color: VastraColors.ivory, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
+
+    try {
+      final bytes = _selectedFabric!.imageBytes != null
+          ? Uint8List.fromList(_selectedFabric!.imageBytes!)
+          : null;
+      
+      String textureId = _selectedFabric!.id;
+      if (_selectedFabric!.assetPath != null) {
+        textureId = _selectedFabric!.assetPath!.split('/').last;
+      }
+
+      await provider.renderFinal(textureId, customFabricBytes: bytes);
+      
+      if (!mounted) return;
+      Navigator.pop(context); // Dismiss loading dialog
+
+      Navigator.push(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => const ResultScreen(),
+          transitionDuration: VastraConstants.animationSlow,
+          transitionsBuilder: (_, anim, __, child) =>
+              FadeTransition(opacity: anim, child: child),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Dismiss loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to render final output: $e'),
+          backgroundColor: Colors.red[900],
+        ),
+      );
+    }
   }
 
   void _onSelectFabric(FabricItem item, Uint8List? imageBytes) {
@@ -108,7 +162,9 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
       backgroundColor: VastraColors.background,
       body: Stack(
         children: [
-          Container(decoration: const BoxDecoration(gradient: VastraTheme.deepGradient)),
+          Container(
+              decoration:
+                  const BoxDecoration(gradient: VastraTheme.deepGradient)),
           SafeArea(
             child: Column(
               children: [
@@ -149,7 +205,8 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
   Widget _buildHeader() {
     final provider = context.watch<VastraProvider>();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(VastraConstants.pagePadding, 18, VastraConstants.pagePadding, 0),
+      padding: const EdgeInsets.fromLTRB(
+          VastraConstants.pagePadding, 18, VastraConstants.pagePadding, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -159,16 +216,21 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
                 child: Text(
                   'Choose Your Fabric',
                   style: Theme.of(context).textTheme.headlineLarge,
-                ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.2, end: 0, duration: 400.ms),
+                )
+                    .animate()
+                    .fadeIn(duration: 400.ms)
+                    .slideY(begin: 0.2, end: 0, duration: 400.ms),
               ),
               // Upload custom button
               GestureDetector(
                 onTap: _pickCustomFabric,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: VastraColors.gold.withOpacity(0.5)),
+                    border:
+                        Border.all(color: VastraColors.gold.withOpacity(0.5)),
                     color: VastraColors.gold.withOpacity(0.08),
                   ),
                   child: Row(
@@ -183,13 +245,15 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
                                 color: VastraColors.gold,
                               ),
                             )
-                          : const Icon(Icons.upload_rounded, size: 14, color: VastraColors.gold),
+                          : const Icon(Icons.upload_rounded,
+                              size: 14, color: VastraColors.gold),
                       const SizedBox(width: 6),
                       Text('Upload',
                           style: Theme.of(context)
                               .textTheme
                               .labelSmall
-                              ?.copyWith(color: VastraColors.gold, fontSize: 11)),
+                              ?.copyWith(
+                                  color: VastraColors.gold, fontSize: 11)),
                     ],
                   ),
                 ),
@@ -212,7 +276,8 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
 
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(VastraConstants.pagePadding, 16, VastraConstants.pagePadding, 0),
+      padding: const EdgeInsets.fromLTRB(
+          VastraConstants.pagePadding, 16, VastraConstants.pagePadding, 0),
       child: Container(
         height: 44,
         decoration: BoxDecoration(
@@ -222,14 +287,19 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
         ),
         child: TextField(
           controller: _searchCtrl,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: VastraColors.ivory),
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium
+              ?.copyWith(color: VastraColors.ivory),
           decoration: InputDecoration(
             hintText: 'Search fabrics...',
             hintStyle: TextStyle(color: VastraColors.textMuted, fontSize: 14),
-            prefixIcon: Icon(Icons.search_rounded, color: VastraColors.textMuted, size: 18),
+            prefixIcon: Icon(Icons.search_rounded,
+                color: VastraColors.textMuted, size: 18),
             suffixIcon: _searchCtrl.text.isNotEmpty
                 ? IconButton(
-                    icon: Icon(Icons.close_rounded, color: VastraColors.textMuted, size: 16),
+                    icon: Icon(Icons.close_rounded,
+                        color: VastraColors.textMuted, size: 16),
                     onPressed: () {
                       _searchCtrl.clear();
                       context.read<FabricCatalogProvider>().clearSearch();
@@ -250,7 +320,8 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
       height: 44,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(left: VastraConstants.pagePadding, right: 12, top: 8),
+        padding: const EdgeInsets.only(
+            left: VastraConstants.pagePadding, right: 12, top: 8),
         itemCount: FabricCategory.values.length,
         itemBuilder: (_, i) {
           final cat = FabricCategory.values[i];
@@ -262,18 +333,24 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
                 child: AnimatedContainer(
                   duration: 200.ms,
                   margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
-                    color: isActive ? VastraColors.gold : VastraColors.surfaceCard,
+                    color:
+                        isActive ? VastraColors.gold : VastraColors.surfaceCard,
                     border: Border.all(
-                      color: isActive ? VastraColors.gold : VastraColors.borderLight,
+                      color: isActive
+                          ? VastraColors.gold
+                          : VastraColors.borderLight,
                     ),
                   ),
                   child: Text(
                     cat.label,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: isActive ? VastraColors.textOnGold : VastraColors.warmGrayDark,
+                          color: isActive
+                              ? VastraColors.textOnGold
+                              : VastraColors.warmGrayDark,
                           fontSize: 12,
                         ),
                   ),
@@ -335,8 +412,7 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
   }
 
   Widget _buildBottomAction() {
-    final canVisualize = _selectedFabric != null &&
-        context.watch<VastraProvider>().fabricImageBytes != null;
+    final canVisualize = _selectedFabric != null;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -355,7 +431,8 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
               height: 56,
               decoration: canVisualize
                   ? BoxDecoration(
-                      borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
+                      borderRadius: BorderRadius.circular(
+                          VastraConstants.buttonBorderRadius),
                       gradient: VastraTheme.goldGradient,
                       boxShadow: [
                         BoxShadow(
@@ -366,7 +443,8 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
                       ],
                     )
                   : BoxDecoration(
-                      borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
+                      borderRadius: BorderRadius.circular(
+                          VastraConstants.buttonBorderRadius),
                       color: VastraColors.surface,
                       border: Border.all(color: VastraColors.borderLight),
                     ),
@@ -376,13 +454,17 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
                   Icon(
                     Icons.auto_awesome_rounded,
                     size: 20,
-                    color: canVisualize ? VastraColors.textOnGold : VastraColors.textMuted,
+                    color: canVisualize
+                        ? VastraColors.textOnGold
+                        : VastraColors.textMuted,
                   ),
                   const SizedBox(width: 10),
                   Text(
                     canVisualize ? 'Visualize Now' : 'Select a Fabric',
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: canVisualize ? VastraColors.textOnGold : VastraColors.textMuted,
+                          color: canVisualize
+                              ? VastraColors.textOnGold
+                              : VastraColors.textMuted,
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
                         ),
@@ -407,7 +489,8 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.check_circle_rounded, size: 14, color: VastraColors.gold),
+          const Icon(Icons.check_circle_rounded,
+              size: 14, color: VastraColors.gold),
           const SizedBox(width: 8),
           Text(
             '${_selectedFabric!.name} selected',
@@ -422,7 +505,8 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
               setState(() => _selectedFabric = null);
               context.read<VastraProvider>().clearFabricImage();
             },
-            child: Icon(Icons.close_rounded, size: 14, color: VastraColors.gold.withOpacity(0.6)),
+            child: Icon(Icons.close_rounded,
+                size: 14, color: VastraColors.gold.withOpacity(0.6)),
           ),
         ],
       ),
@@ -505,7 +589,8 @@ class _FabricFingerprintCard extends StatelessWidget {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: VastraColors.gold.withOpacity(0.25 + glow * 0.08),
+                        color:
+                            VastraColors.gold.withOpacity(0.25 + glow * 0.08),
                         blurRadius: 20,
                         spreadRadius: 1,
                       ),
@@ -514,7 +599,8 @@ class _FabricFingerprintCard extends StatelessWidget {
                 : BoxDecoration(
                     borderRadius: BorderRadius.circular(18),
                     color: VastraColors.surfaceCard,
-                    border: Border.all(color: VastraColors.borderLight, width: 0.8),
+                    border:
+                        Border.all(color: VastraColors.borderLight, width: 0.8),
                   ),
             child: child,
           );
@@ -524,7 +610,8 @@ class _FabricFingerprintCard extends StatelessWidget {
           children: [
             // ── Fabric image / preview ────────────────────────────────────
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(17)),
               child: SizedBox(
                 height: 130,
                 width: double.infinity,
@@ -538,7 +625,8 @@ class _FabricFingerprintCard extends StatelessWidget {
                       top: 8,
                       left: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           color: Colors.black.withOpacity(0.55),
                           borderRadius: BorderRadius.circular(6),
@@ -624,7 +712,8 @@ class _FabricFingerprintCard extends StatelessWidget {
                         const Spacer(),
 
                         // AI compat score
-                        _AICompatBadge(score: item.aiCompatScore, isSelected: isSelected),
+                        _AICompatBadge(
+                            score: item.aiCompatScore, isSelected: isSelected),
                       ],
                     ),
                   ],
@@ -637,7 +726,8 @@ class _FabricFingerprintCard extends StatelessWidget {
     )
         .animate(delay: Duration(milliseconds: 60 * index))
         .fadeIn(duration: 350.ms)
-        .slideY(begin: 0.12, end: 0, duration: 350.ms, curve: Curves.easeOutCubic);
+        .slideY(
+            begin: 0.12, end: 0, duration: 350.ms, curve: Curves.easeOutCubic);
   }
 
   Widget _buildFabricImage() {
@@ -731,8 +821,8 @@ class _FabricPatternPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rng = math.Random(seed);
     final bg = colors.first.withOpacity(0.25);
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height),
-        Paint()..color = bg);
+    canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width, size.height), Paint()..color = bg);
 
     // Draw woven grid lines
     final c1 = colors[0 % colors.length];

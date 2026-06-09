@@ -1,5 +1,5 @@
 # Vastra AI Package Exporter
 
-from .segmentation import VastraSegmenter
-from .inpaint import VastraInpainter
-from .pipeline import VastraPipeline, VastraFabricSwapPipeline
+from .segmentation import InteractiveSAMEngine
+from .pipeline import TextureProjectionEngine
+from .utils import contour_dominance_filter, anti_fringe_dilate

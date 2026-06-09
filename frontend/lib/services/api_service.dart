@@ -1,8 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../core/constants.dart';
 
+/// Service class to communicate with Vastra SAM2 decoupled backend engine.
 class ApiService {
   ApiService._();
   static final ApiService instance = ApiService._();
@@ -11,7 +14,8 @@ class ApiService {
   Future<bool> checkHealth() async {
     try {
       final response = await http
-          .get(Uri.parse('${VastraConstants.baseUrl}${VastraConstants.healthEndpoint}'))
+          .get(Uri.parse(
+              '${VastraConstants.baseUrl}${VastraConstants.healthEndpoint}'))
           .timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (_) {
@@ -19,47 +23,97 @@ class ApiService {
     }
   }
 
-  /// Sends the room image, selected product category, and fabric image to the
-  /// backend and returns the generated result as raw PNG bytes.
-  Future<Uint8List> generateFabric({
-    required Uint8List roomImageBytes,
-    required String productCategory,
-    required Uint8List fabricImageBytes,
-  }) async {
-    final uri =
-        Uri.parse('${VastraConstants.baseUrl}${VastraConstants.generateEndpoint}');
-
+  /// 1. Sends the room image as a multipart request to /api/upload.
+  /// Returns the generated session_id.
+  Future<String> uploadRoomImage(File imageFile) async {
+    final uri = Uri.parse(
+        '${VastraConstants.baseUrl}${VastraConstants.uploadEndpoint}');
+    
     final request = http.MultipartRequest('POST', uri);
-
-    request.files.add(http.MultipartFile.fromBytes(
+    request.files.add(await http.MultipartFile.fromPath(
       'room_image',
-      roomImageBytes,
-      filename: 'room.jpg',
+      imageFile.path,
       contentType: MediaType('image', 'jpeg'),
     ));
-
-    request.files.add(http.MultipartFile.fromBytes(
-      'fabric_image',
-      fabricImageBytes,
-      filename: 'fabric.jpg',
-      contentType: MediaType('image', 'jpeg'),
-    ));
-
-    request.fields['product_category'] = productCategory;
 
     final streamedResponse = await request.send().timeout(
-      const Duration(minutes: 3),
+      const Duration(minutes: 1),
       onTimeout: () {
-        throw Exception(
-            'Request timed out. The AI processing took longer than 3 minutes.');
+        throw Exception('Upload request timed out.');
       },
     );
 
-    if (streamedResponse.statusCode == 200) {
-      return await streamedResponse.stream.toBytes();
+    final response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode == 200) {
+      final jsonResponse = json.decode(response.body);
+      final sessionId = jsonResponse['session_id'] as String?;
+      if (sessionId == null) {
+        throw Exception('session_id not found in response: ${response.body}');
+      }
+      return sessionId;
     } else {
-      final body = await streamedResponse.stream.bytesToString();
-      throw Exception('Backend returned ${streamedResponse.statusCode}: $body');
+      throw Exception('Upload failed: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  /// 2. Sends the session_id, category, and point prompts to /api/interact.
+  /// Expects binary image data back (the preview overlay PNG).
+  Future<Uint8List> sendInteractiveTap({
+    required String sessionId,
+    required String productCategory,
+    required List<Map<String, dynamic>> points,
+  }) async {
+    final uri = Uri.parse(
+        '${VastraConstants.baseUrl}${VastraConstants.interactEndpoint}');
+
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'session_id': sessionId,
+        'product_category': productCategory,
+        'points': points,
+      }),
+    ).timeout(const Duration(minutes: 1));
+
+    if (response.statusCode == 200) {
+      return response.bodyBytes;
+    } else {
+      throw Exception('Interaction failed: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  /// 3. Sends the session_id, fabricTextureId, productCategory, and optional
+  /// custom fabric image (base64) to /api/render.
+  /// Returns the final OpenCV composited room image.
+  Future<Uint8List> renderFinalFabric({
+    required String sessionId,
+    required String fabricTextureId,
+    required String productCategory,
+    String? fabricImageBase64,
+  }) async {
+    final uri = Uri.parse(
+        '${VastraConstants.baseUrl}${VastraConstants.renderEndpoint}');
+
+    final payload = {
+      'session_id': sessionId,
+      'fabric_texture_id': fabricTextureId,
+      'product_category': productCategory,
+    };
+    if (fabricImageBase64 != null) {
+      payload['fabric_image_base64'] = fabricImageBase64;
+    }
+
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(payload),
+    ).timeout(const Duration(minutes: 2));
+
+    if (response.statusCode == 200) {
+      return response.bodyBytes;
+    } else {
+      throw Exception('Render failed: ${response.statusCode} - ${response.body}');
     }
   }
 }

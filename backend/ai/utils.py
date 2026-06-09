@@ -1,9 +1,29 @@
+"""
+Vastra AI Utilities — Geometric Alignment & Post-Processing
+=============================================================
+
+Utility functions for image handling, mask post-processing, and geometric
+alignment used across the Vastra AI pipeline.
+
+Includes:
+  - File I/O helpers (save_upload_file, ensure_dirs, load_image)
+  - Image transforms (compress_image, pil_to_bytes, numpy_to_pil)
+  - Contour Dominance Filtering (isolate largest mask structure)
+  - Anti-Fringe Mask Dilation (eliminate rim artifacts)
+"""
+
 from PIL import Image
 import io
 import os
 import shutil
+import cv2
+import numpy as np
 from pathlib import Path
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  File I/O Helpers
+# ═════════════════════════════════════════════════════════════════════════════
 
 def save_upload_file(upload_file, destination: Path) -> None:
     """Save a FastAPI UploadFile to a local path synchronously."""
@@ -24,6 +44,10 @@ def load_image(path: str) -> Image.Image:
     """Open an image file as a PIL RGB image."""
     return Image.open(path).convert("RGB")
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  Image Transforms
+# ═════════════════════════════════════════════════════════════════════════════
 
 def compress_image(pil_image: Image.Image, max_dimension: int = 1920, quality: int = 85) -> Image.Image:
     """Resize image so its longest side is ≤ max_dimension, preserving aspect ratio."""
@@ -49,5 +73,137 @@ def pil_to_bytes(pil_image: Image.Image, fmt: str = "PNG") -> bytes:
 
 def numpy_to_pil(arr, mode: str = "RGB") -> Image.Image:
     """Convert a numpy ndarray to a PIL Image."""
-    import numpy as np
     return Image.fromarray(arr.astype(np.uint8), mode)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  Contour Dominance Filtering
+# ═════════════════════════════════════════════════════════════════════════════
+
+def contour_dominance_filter(mask_np: np.ndarray) -> np.ndarray:
+    """
+    Isolate the single largest continuous mask structure and drop all noise.
+
+    Algorithm:
+      1. Use topological external contour detection (RETR_EXTERNAL) to find
+         all disconnected mask regions.
+      2. Compute the polygon surface area for each contour.
+      3. Retain ONLY the maximum-area continuous mass.
+      4. Drop all unlinked pixel islands, background dust, and noise fragments.
+
+    Args:
+        mask_np: Binary mask (H, W), dtype uint8, 255 = foreground.
+
+    Returns:
+        np.ndarray: Cleaned binary mask (H, W), dtype uint8, containing only
+                    the single largest contiguous region. Returns a zero mask
+                    if input is empty.
+    """
+    if mask_np is None or mask_np.size == 0 or mask_np.max() == 0:
+        return np.zeros_like(mask_np) if mask_np is not None else np.zeros((1, 1), dtype=np.uint8)
+
+    # Ensure binary
+    _, binary = cv2.threshold(mask_np, 127, 255, cv2.THRESH_BINARY)
+
+    # Find all external contours (topological boundary detection)
+    contours, _ = cv2.findContours(
+        binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    if not contours:
+        return np.zeros_like(mask_np)
+
+    # Compute polygon surface area for each contour and select the largest
+    largest_contour = max(contours, key=cv2.contourArea)
+    largest_area = cv2.contourArea(largest_contour)
+
+    if largest_area < 1.0:
+        return np.zeros_like(mask_np)
+
+    # Draw only the dominant contour filled onto a clean canvas
+    clean_mask = np.zeros_like(mask_np)
+    cv2.drawContours(clean_mask, [largest_contour], -1, 255, cv2.FILLED)
+
+    dropped_count = len(contours) - 1
+    if dropped_count > 0:
+        total_dropped_area = sum(
+            cv2.contourArea(c) for c in contours if not np.array_equal(c, largest_contour)
+        )
+        print(
+            f"[contour_dominance_filter] Retained largest contour "
+            f"(area={largest_area:.0f}px²). Dropped {dropped_count} island(s) "
+            f"(total area={total_dropped_area:.0f}px²)."
+        )
+
+    return clean_mask
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  Anti-Fringe Mask Dilation
+# ═════════════════════════════════════════════════════════════════════════════
+
+def anti_fringe_dilate(
+    mask_np: np.ndarray,
+    dilate_px: int = 2,
+    blur_sigma: float = 1.0,
+) -> np.ndarray:
+    """
+    Apply a tiny morphological dilation followed by a gentle Gaussian edge
+    feather to eliminate rim artifacts (anti-fringe).
+
+    Purpose:
+      When projecting a new fabric texture onto a segmented region, the
+      original fabric color can peek through as a thin fringe/rim around
+      the mask boundary. This function pushes the mask edge outward by
+      1–2 pixels and softens the transition to prevent that artifact.
+
+    Algorithm:
+      1. Dilate the mask with a small elliptical kernel (dilate_px radius).
+         This expands the mask boundary outward by 1–2 pixels.
+      2. Apply a gentle Gaussian blur to feather the hard dilated edge.
+         This creates a smooth alpha transition at the boundary.
+      3. Re-threshold to binary to maintain a clean mask.
+
+    Args:
+        mask_np: Binary mask (H, W), dtype uint8, 255 = foreground.
+        dilate_px: Dilation kernel radius in pixels (default: 2).
+        blur_sigma: Gaussian blur sigma for edge feathering (default: 1.0).
+
+    Returns:
+        np.ndarray: Anti-fringed binary mask (H, W), dtype uint8.
+    """
+    if mask_np is None or mask_np.size == 0 or mask_np.max() == 0:
+        return np.zeros_like(mask_np) if mask_np is not None else np.zeros((1, 1), dtype=np.uint8)
+
+    # Ensure binary input
+    _, binary = cv2.threshold(mask_np, 127, 255, cv2.THRESH_BINARY)
+
+    # Step 1: Morphological dilation with small elliptical kernel
+    kernel_size = max(3, dilate_px * 2 + 1)  # Ensure odd kernel size
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (kernel_size, kernel_size)
+    )
+    dilated = cv2.dilate(binary, kernel, iterations=1)
+
+    # Step 2: Gentle Gaussian blur to feather the hard edge
+    blur_ksize = max(3, int(blur_sigma * 4) | 1)  # Ensure odd
+    feathered = cv2.GaussianBlur(
+        dilated.astype(np.float32), (blur_ksize, blur_ksize), blur_sigma
+    )
+
+    # Step 3: Re-threshold to clean binary mask
+    _, result = cv2.threshold(
+        feathered.astype(np.uint8), 127, 255, cv2.THRESH_BINARY
+    )
+
+    # Report expansion
+    original_area = np.count_nonzero(binary)
+    expanded_area = np.count_nonzero(result)
+    expansion_px = expanded_area - original_area
+    if expansion_px > 0:
+        print(
+            f"[anti_fringe_dilate] Expanded mask by {expansion_px} pixels "
+            f"({original_area} → {expanded_area})."
+        )
+
+    return result

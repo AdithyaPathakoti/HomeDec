@@ -5,7 +5,7 @@ import '../core/theme.dart';
 import '../core/constants.dart';
 import '../models/product_category.dart';
 import '../providers/vastra_provider.dart';
-import 'fabric_catalog_screen.dart';
+import 'processing_screen.dart';
 
 class ProductSelectionScreen extends StatefulWidget {
   const ProductSelectionScreen({super.key});
@@ -27,7 +27,7 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const FabricCatalogScreen(),
+        pageBuilder: (_, __, ___) => const ProcessingScreen(),
         transitionDuration: VastraConstants.animationSlow,
         transitionsBuilder: (_, anim, __, child) => FadeTransition(
           opacity: anim,
