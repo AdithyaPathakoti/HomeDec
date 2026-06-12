@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 
 from ai.segmentation import InteractiveSAMEngine
 from ai.pipeline import TextureProjectionEngine
+from ai.fabric_registry import resolve_texture
 from ai.utils import ensure_dirs, compress_image, pil_to_bytes, contour_dominance_filter, anti_fringe_dilate
 
 
@@ -53,8 +54,8 @@ _session_store: dict = {}
 _session_lock = threading.Lock()
 
 
-class SessionData:
-    """Stores cached data for a single upload session."""
+class SessionData(dict):
+    """Stores cached data for a single upload session, supporting both attribute and dict-like access."""
 
     def __init__(
         self,
@@ -63,15 +64,57 @@ class SessionData:
         image_embedding: dict,
         original_size: tuple,
     ):
-        self.session_id = session_id
-        self.image_np = image_np
-        self.image_embedding = image_embedding
-        self.original_size = original_size  # (H, W)
-        self.created_at = time.time()
-        self.last_mask: Optional[np.ndarray] = None  # Cache last decoder mask
+        super().__init__()
+        self["session_id"] = session_id
+        self["image_np"] = image_np
+        self["image_embedding"] = image_embedding
+        self["original_size"] = original_size
+        self["created_at"] = time.time()
+        self["last_mask"] = None
+        self["last_logits"] = None
+
+    @property
+    def session_id(self) -> str:
+        return self["session_id"]
+
+    @property
+    def image_np(self) -> np.ndarray:
+        return self["image_np"]
+
+    @image_np.setter
+    def image_np(self, value: np.ndarray):
+        self["image_np"] = value
+
+    @property
+    def image_embedding(self) -> dict:
+        return self["image_embedding"]
+
+    @property
+    def original_size(self) -> tuple:
+        return self["original_size"]
+
+    @property
+    def created_at(self) -> float:
+        return self["created_at"]
+
+    @property
+    def last_mask(self) -> Optional[np.ndarray]:
+        return self["last_mask"]
+
+    @last_mask.setter
+    def last_mask(self, value: Optional[np.ndarray]):
+        self["last_mask"] = value
+
+    @property
+    def last_logits(self) -> Optional[np.ndarray]:
+        return self.get("last_logits")
+
+    @last_logits.setter
+    def last_logits(self, value: Optional[np.ndarray]):
+        self["last_logits"] = value
 
     def is_expired(self) -> bool:
-        return (time.time() - self.created_at) > SESSION_TTL_SECONDS
+        return (time.time() - self["created_at"]) > SESSION_TTL_SECONDS
 
 
 def _get_session(session_id: str) -> SessionData:
@@ -237,6 +280,7 @@ async def api_upload(room_image: UploadFile = File(...)):
             image_embedding=embedding,
             original_size=(h, w),
         )
+        session.last_logits = None
         with _session_lock:
             _session_store[session_id] = session
 
@@ -298,22 +342,20 @@ async def api_interact(request: InteractRequest):
 
         # Run SAM2 Decoder (fast — reuses cached embedding)
         engine = get_sam_engine()
-        raw_mask = engine.predict_decoder(
+        raw_mask, low_res_logits = engine.predict_decoder(
             image_embedding=session.image_embedding,
             points=points,
             image_size=(h, w),
+            low_res_logits=session.last_logits,
         )
 
-        # Post-processing: contour dominance filter + anti-fringe dilation
-        clean_mask = contour_dominance_filter(raw_mask)
-        clean_mask = anti_fringe_dilate(clean_mask, dilate_px=2, blur_sigma=1.0)
+        # Store the low-res logits and raw mask for stateful iterative refinement
+        session.last_logits = low_res_logits
+        session.last_mask = raw_mask
 
-        # Cache the latest mask on the session for potential /api/render use
-        session.last_mask = clean_mask
-
-        # Generate preview overlay
+        # Generate preview overlay using raw mask directly (bypassing smoothing for interact)
         overlay_np = InteractiveSAMEngine.generate_preview_overlay(
-            session.image_np, clean_mask
+            session.image_np, raw_mask
         )
 
         # Encode to PNG
@@ -368,6 +410,10 @@ async def api_render(request: RenderRequest):
                     detail="No mask has been generated for this session yet. Run /api/interact first."
                 )
             mask_np = session.last_mask
+
+        # Apply post-processing (smoothing and edge cleanup) strictly inside /api/render
+        mask_np = contour_dominance_filter(mask_np)
+        mask_np = anti_fringe_dilate(mask_np, dilate_px=2, blur_sigma=1.0)
 
         # ── Load fabric texture ──────────────────────────────────────────────
         if request.fabric_image_base64:
@@ -427,25 +473,10 @@ async def api_render(request: RenderRequest):
 
 def _resolve_fabric_path(texture_id: str) -> Optional[str]:
     """
-    Resolve a fabric_texture_id to an actual file path in assets/fabrics/.
-
-    Tries common image extensions: .jpg, .jpeg, .png, .webp.
-    Also checks if the texture_id itself already has an extension.
+    Resolve a fabric_texture_id to an actual file path in assets/fabrics/
+    by delegating to the fabric_registry module.
     """
-    fabric_dir = Path("assets/fabrics")
-
-    # Direct match (texture_id already has extension)
-    direct = fabric_dir / texture_id
-    if direct.is_file():
-        return str(direct)
-
-    # Try common extensions
-    for ext in [".jpg", ".jpeg", ".png", ".webp"]:
-        candidate = fabric_dir / f"{texture_id}{ext}"
-        if candidate.is_file():
-            return str(candidate)
-
-    return None
+    return resolve_texture(texture_id)
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────

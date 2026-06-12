@@ -64,42 +64,92 @@ class TextureProjectionEngine:
         Returns:
             np.ndarray: Composited result image (H, W, 3), dtype uint8, RGB.
         """
+        import time
         h, w = room_np.shape[:2]
-        print(
-            f"[TextureProjectionEngine] render() – "
-            f"room={w}x{h}, category='{product_category}', "
-            f"fabric={fabric_np.shape[1]}x{fabric_np.shape[0]}"
-        )
 
+        # Guard: empty mask check
         if mask_np.max() == 0:
-            print("[TextureProjectionEngine] WARNING: Empty mask. Returning original.")
+            print("[TextureProjectionEngine] WARNING: Empty mask. Returning original room.")
             return room_np.copy()
 
-        # ── Step 1: Texture Tiling ───────────────────────────────────────────
-        tiled = self._tile_texture(fabric_np, mask_np)
-        print(f"[TextureProjectionEngine] Step 1 – Tiled texture: {tiled.shape}")
+        t_start = time.perf_counter()
 
-        # ── Step 2: Planar Perspective Mapping ───────────────────────────────
+        # ROI Extraction & Bounding Box Optimization
+        ys, xs = np.where(mask_np > 127)
+        if len(xs) == 0:
+            return room_np.copy()
+
+        y_min, y_max = int(ys.min()), int(ys.max())
+        x_min, x_max = int(xs.min()), int(xs.max())
+        full_bbox_w = x_max - x_min
+
+        # Add a 20px margin and clamp to image dimensions to prevent IndexError
+        margin = 20
+        y_min_m = max(0, y_min - margin)
+        y_max_m = min(h, y_max + margin)
+        x_min_m = max(0, x_min - margin)
+        x_max_m = min(w, x_max + margin)
+
+        # Crop inputs to local ROI coordinate space
+        room_roi = room_np[y_min_m:y_max_m, x_min_m:x_max_m]
+        mask_roi = mask_np[y_min_m:y_max_m, x_min_m:x_max_m]
+
+        h_roi, w_roi = room_roi.shape[:2]
+
+        # Degenerate Fallback: If ROI dimensions are too small, fallback to standard linear blend
+        if h_roi < 8 or w_roi < 8:
+            print("[TextureProjectionEngine] WARNING: Tiny ROI. Returning standard linear blend.")
+            mask_float = mask_np.astype(np.float32) / 255.0
+            alpha_3ch = mask_float[:, :, np.newaxis]
+            tiled = self._tile_texture(fabric_np, mask_np, full_bbox_w)
+            result = tiled.astype(np.float32) * alpha_3ch + room_np.astype(np.float32) * (1.0 - alpha_3ch)
+            return np.clip(result, 0, 255).astype(np.uint8)
+
+        # ── Step 1: Texture Tiling (ROI Local) ───────────────────────────────
+        t0 = time.perf_counter()
+        tiled_roi = self._tile_texture(fabric_np, mask_roi, full_bbox_w)
+        t_tiling = time.perf_counter() - t0
+
+        # ── Step 2: Planar Perspective Mapping (ROI Local) ───────────────────
+        t0 = time.perf_counter()
         if product_category.lower() in FLAT_CATEGORIES:
-            tiled = self._perspective_map(tiled, mask_np)
-            print("[TextureProjectionEngine] Step 2 – Perspective mapping applied.")
+            perspective_roi = self._perspective_map(tiled_roi, mask_roi, product_category)
+            has_persp = True
         else:
-            print(
-                f"[TextureProjectionEngine] Step 2 – Skipped perspective "
-                f"(category '{product_category}' is not flat)."
-            )
+            perspective_roi = tiled_roi
+            has_persp = False
+        t_persp = time.perf_counter() - t0
 
-        # ── Step 3: Luminance Displacement Warping ───────────────────────────
-        tiled = self._luminance_warp(tiled, room_np, mask_np)
-        print("[TextureProjectionEngine] Step 3 – Luminance displacement warping applied.")
+        # ── Step 3: Physical Geometry Warping (ROI Local) ────────────────────
+        t0 = time.perf_counter()
+        warped_roi = self._luminance_warp(perspective_roi, room_roi, mask_roi)
+        t_warp = time.perf_counter() - t0
 
-        # ── Step 4: Lighting Blend Layer ─────────────────────────────────────
-        lit_fabric = self._lighting_blend(tiled, room_np, mask_np)
-        print("[TextureProjectionEngine] Step 4 – Lighting blend applied.")
+        # ── Step 4 & 5: Lighting Blend Layer (ROI Local) ─────────────────────
+        t0 = time.perf_counter()
+        blended_roi = self._lighting_blend(warped_roi, room_roi, mask_roi)
+        t_blend = time.perf_counter() - t0
 
-        # ── Final Composite ──────────────────────────────────────────────────
-        result = self._composite(room_np, lit_fabric, mask_np)
-        print("[TextureProjectionEngine] Render complete.")
+        # ── Step 6: ROI feathered compositing ────────────────────────────────
+        t0 = time.perf_counter()
+        composite_roi = self._composite(room_roi, blended_roi, mask_roi)
+        t_comp = time.perf_counter() - t0
+
+        # ── Step 7: Paste composited ROI back into the full canvas ───────────
+        result = room_np.copy()
+        result[y_min_m:y_max_m, x_min_m:x_max_m] = composite_roi
+
+        t_total = time.perf_counter() - t_start
+        print(
+            f"[TextureProjectionEngine] ROI Bounding Box: [{y_min_m}:{y_max_m}, {x_min_m}:{x_max_m}] ({w_roi}x{h_roi})\n"
+            f"[TextureProjectionEngine] Profiling Summary:\n"
+            f"  - Tiling:       {t_tiling*1000:.2f} ms\n"
+            f"  - Perspective:  {t_persp*1000:.2f} ms (applied: {has_persp})\n"
+            f"  - Sobel Warp:   {t_warp*1000:.2f} ms\n"
+            f"  - Light Blend:  {t_blend*1000:.2f} ms\n"
+            f"  - Composite:    {t_comp*1000:.2f} ms\n"
+            f"  - Total Budget: {t_total*1000:.2f} ms / 1000.00 ms"
+        )
         return result
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -107,251 +157,286 @@ class TextureProjectionEngine:
     # ═════════════════════════════════════════════════════════════════════════
 
     def _tile_texture(
-        self, fabric_np: np.ndarray, mask_np: np.ndarray
+        self, fabric_np: np.ndarray, mask_roi: np.ndarray, full_bbox_w: int
     ) -> np.ndarray:
         """
         Tile the input fabric pattern dynamically across the bounding
-        dimensions of the active mask.
-
-        The tile size is set proportionally to the mask's bounding box width
-        (roughly 1/3 of bbox width) to produce 2–3 natural repeats across
-        the object.
+        dimensions of the active local mask.
         """
-        h, w = mask_np.shape[:2]
+        h_roi, w_roi = mask_roi.shape[:2]
         fh, fw = fabric_np.shape[:2]
 
-        # Compute mask bounding box
-        ys, xs = np.where(mask_np > 127)
-        if len(xs) == 0:
-            return np.zeros((h, w, 3), dtype=np.uint8)
-
-        bbox_w = int(xs.max() - xs.min())
-        bbox_h = int(ys.max() - ys.min())
-
-        # Tile reference: ~1/3 of bbox width → 2-3 repeats across the object
-        tile_w = max(64, bbox_w // 3)
+        # Compute tile width based on the original full bounding box width
+        # to ensure pattern scale is consistent across zoom levels.
+        tile_w = max(64, full_bbox_w // 3)
         tile_h = max(64, int(tile_w * (fh / fw)))  # Preserve aspect ratio
 
-        # Resize the fabric swatch to tile dimensions
+        # Resize fabric swatch to tile dimensions
         tile = cv2.resize(
             fabric_np, (tile_w, tile_h), interpolation=cv2.INTER_LANCZOS4
         )
 
-        # Tile across the full image canvas
-        reps_x = (w // tile_w) + 2
-        reps_y = (h // tile_h) + 2
+        # Tile across the local ROI canvas dimensions
+        reps_x = (w_roi // tile_w) + 2
+        reps_y = (h_roi // tile_h) + 2
         tiled = np.tile(tile, (reps_y, reps_x, 1))
 
-        # Crop to exact image dimensions
-        tiled = tiled[:h, :w, :]
+        # Crop to exact local ROI dimensions
+        tiled = tiled[:h_roi, :w_roi, :]
         return tiled
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  STEP 2 — Planar Perspective Mapping
+    #  STEP 2 — Planar Perspective Mapping (Vectorized Row-Wise Compression)
     # ═════════════════════════════════════════════════════════════════════════
 
     def _perspective_map(
-        self, tiled_np: np.ndarray, mask_np: np.ndarray
+        self, tiled_roi: np.ndarray, mask_roi: np.ndarray, product_category: str
     ) -> np.ndarray:
         """
-        For flat categories (Rug, Bedsheet), apply a spatial transformation
-        so pattern lines shrink as they recede into the room's background
-        perspective.
-
-        Uses a homography transform: the top edge of the mask bounding box
-        is compressed inward (simulating distance), while the bottom edge
-        stays at full width.
+        For flat categories (Rug, Bedsheet), apply a continuous, row-wise
+        vertical perspective compression inside the ROI.
         """
-        h, w = mask_np.shape[:2]
-        ys, xs = np.where(mask_np > 127)
+        if product_category.lower() not in FLAT_CATEGORIES:
+            return tiled_roi
+
+        H_roi, W_roi = mask_roi.shape[:2]
+        ys, xs = np.where(mask_roi > 127)
         if len(xs) == 0:
-            return tiled_np
+            return tiled_roi
 
-        x_min, x_max = int(xs.min()), int(xs.max())
-        y_min, y_max = int(ys.min()), int(ys.max())
+        y_min_mask, y_max_mask = int(ys.min()), int(ys.max())
+        x_min_mask, x_max_mask = int(xs.min()), int(xs.max())
 
-        bbox_w = x_max - x_min
-        bbox_h = y_max - y_min
-        if bbox_w < 10 or bbox_h < 10:
-            return tiled_np
+        # Guard against degenerate thin masks
+        if (y_max_mask - y_min_mask) < 2 or (x_max_mask - x_min_mask) < 2:
+            return tiled_roi
 
-        # Source corners: full rectangular tile region
-        src_pts = np.float32([
-            [x_min, y_min],             # top-left
-            [x_max, y_min],             # top-right
-            [x_max, y_max],             # bottom-right
-            [x_min, y_max],             # bottom-left
-        ])
+        x_center = float(xs.mean())
+        f = 0.18  # configurable perspective scaling factor (~15% to 20%)
 
-        # Destination corners: top edge compressed inward by ~15%
-        # to simulate perspective foreshortening
-        inset = int(bbox_w * 0.15)
-        dst_pts = np.float32([
-            [x_min + inset, y_min],     # top-left (shifted right)
-            [x_max - inset, y_min],     # top-right (shifted left)
-            [x_max, y_max],             # bottom-right (unchanged)
-            [x_min, y_max],             # bottom-left (unchanged)
-        ])
+        # 1. Compute scaling factor s(y) for each row index y in the ROI
+        y_indices = np.arange(H_roi, dtype=np.float32)
+        v = np.clip((y_indices - y_min_mask) / (y_max_mask - y_min_mask + 1e-5), 0.0, 1.0)
+        s = (1.0 - f) + f * v  # s ranges from (1-f) at the top of the mask to 1.0 at the bottom
 
-        # Compute and apply the perspective transform
-        M = cv2.getPerspectiveTransform(src_pts, dst_pts)
-        warped = cv2.warpPerspective(
-            tiled_np, M, (w, h),
-            flags=cv2.INTER_LANCZOS4,
-            borderMode=cv2.BORDER_REPLICATE,
-        )
-        return warped
+        # 2. Build local coordinate meshgrids
+        grid_x, grid_y = np.meshgrid(np.arange(W_roi, dtype=np.float32), np.arange(H_roi, dtype=np.float32))
 
-    # ═════════════════════════════════════════════════════════════════════════
-    #  STEP 3 — Luminance Displacement Warping
-    # ═════════════════════════════════════════════════════════════════════════
+        # 3. Horizontal map_x: scales coordinate spacing outward from x_center
+        # map_x(x, y) = x_center + (x - x_center) / s(y)
+        map_x = x_center + (grid_x - x_center) / s[:, np.newaxis]
 
-    def _luminance_warp(
-        self,
-        tiled_np: np.ndarray,
-        room_np: np.ndarray,
-        mask_np: np.ndarray,
-        displacement_scale: float = 3.0,
-    ) -> np.ndarray:
-        """
-        Compute local pixel intensity gradients from the original image
-        under the mask area. Use this gradient map to shift and warp the
-        pattern lines of the fabric over wrinkles, physical curves, and
-        organic folds.
+        # 4. Vertical map_y: integrated from the bottom reference row (y_ref) to prevent vertical drift
+        y_ref = float(y_max_mask)
+        step_y = 1.0 / (s + 1e-5)
+        cum_step = np.cumsum(step_y)
+        map_y_1d = y_ref + cum_step - cum_step[int(y_ref)]
 
-        The displacement magnitude is scaled to ~2-5 pixels for subtle
-        realism — enough to follow surface topology without distortion.
-        """
-        h, w = room_np.shape[:2]
+        # Broadcast map_y_1d across width
+        map_y = np.broadcast_to(map_y_1d[:, np.newaxis], (H_roi, W_roi)).copy()
 
-        # Extract grayscale luminance from the original room image
-        gray = cv2.cvtColor(room_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        # Explicitly cast to float32 for OpenCV's C++ remap execution loop
+        map_x = map_x.astype(np.float32)
+        map_y = map_y.astype(np.float32)
 
-        # Smooth slightly to avoid noise-driven displacements
-        gray_smooth = cv2.GaussianBlur(gray, (5, 5), 1.0)
-
-        # Compute intensity gradients (Sobel)
-        grad_x = cv2.Sobel(gray_smooth, cv2.CV_32F, 1, 0, ksize=3)
-        grad_y = cv2.Sobel(gray_smooth, cv2.CV_32F, 0, 1, ksize=3)
-
-        # Normalize gradients to [-1, 1] range
-        grad_mag = np.sqrt(grad_x**2 + grad_y**2)
-        max_mag = grad_mag.max()
-        if max_mag > 0:
-            grad_x = grad_x / max_mag
-            grad_y = grad_y / max_mag
-
-        # Build displacement maps for cv2.remap
-        # Base identity map
-        map_x = np.arange(w, dtype=np.float32)[np.newaxis, :].repeat(h, axis=0)
-        map_y = np.arange(h, dtype=np.float32)[:, np.newaxis].repeat(w, axis=1)
-
-        # Apply displacement only within the mask region
-        mask_float = (mask_np > 127).astype(np.float32)
-        map_x = map_x + grad_x * displacement_scale * mask_float
-        map_y = map_y + grad_y * displacement_scale * mask_float
-
-        # Remap the tiled texture using the displacement field
+        # Apply transformation with Lanczos4 filter for visual quality preservation
         warped = cv2.remap(
-            tiled_np, map_x, map_y,
+            tiled_roi, map_x, map_y,
             interpolation=cv2.INTER_LANCZOS4,
             borderMode=cv2.BORDER_REPLICATE,
         )
         return warped
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  STEP 4 — Lighting Blend Layer (Soft Light)
+    #  STEP 3 — Luminance Displacement Warping (Mask-Isolated Gradients)
+    # ═════════════════════════════════════════════════════════════════════════
+
+    def _luminance_warp(
+        self,
+        fabric_roi: np.ndarray,
+        room_roi: np.ndarray,
+        mask_roi: np.ndarray,
+        warp_strength: float = 8.0,
+    ) -> np.ndarray:
+        """
+        Apply physical geometry warping over folds and wrinkles using spatial
+        derivatives of the original room luminance, constrained to the mask area.
+        """
+        h_roi, w_roi = room_roi.shape[:2]
+
+        # Extract grayscale luminance
+        gray = cv2.cvtColor(room_roi, cv2.COLOR_RGB2GRAY)
+
+        # Bilateral + Gaussian smoothing to strip existing patterns while preserving shadow borders
+        gray_bilateral = cv2.bilateralFilter(gray, d=9, sigmaColor=75, sigmaSpace=75).astype(np.float32)
+        gray_smooth = cv2.GaussianBlur(gray_bilateral, (5, 5), 1.0)
+
+        # Compute raw spatial Sobel gradients
+        grad_x = cv2.Sobel(gray_smooth, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray_smooth, cv2.CV_32F, 0, 1, ksize=3)
+
+        # Strict Mask Masking: zero out spatial gradients outside segmentation boundary
+        mask_norm = (mask_roi > 127).astype(np.float32)
+        grad_x = grad_x * mask_norm
+        grad_y = grad_y * mask_norm
+
+        # Compute gradient magnitude
+        grad_mag = np.sqrt(grad_x**2 + grad_y**2)
+
+        # Bypass displacement warping if the mean gradient magnitude inside the mask drops below threshold (0.02)
+        masked_pixels = mask_norm > 0
+        if np.count_nonzero(masked_pixels) > 0:
+            mean_grad_mag = np.mean(grad_mag[masked_pixels])
+        else:
+            mean_grad_mag = 0.0
+
+        GRADIENT_MAGNITUDE_THRESHOLD = 0.02
+        if mean_grad_mag < GRADIENT_MAGNITUDE_THRESHOLD:
+            print(f"[TextureProjectionEngine] Mean gradient magnitude ({mean_grad_mag:.4f}) below threshold. Bypassing displacement warp.")
+            return fabric_roi
+
+        # Globally normalize gradients to [0, 1] for stable warp scaling
+        max_mag = grad_mag.max()
+        if max_mag > 0:
+            grad_x_norm = grad_x / (max_mag + 1e-5)
+            grad_y_norm = grad_y / (max_mag + 1e-5)
+        else:
+            grad_x_norm = grad_x
+            grad_y_norm = grad_y
+
+        # Build identity maps
+        map_x = np.arange(w_roi, dtype=np.float32)[np.newaxis, :].repeat(h_roi, axis=0)
+        map_y = np.arange(h_roi, dtype=np.float32)[:, np.newaxis].repeat(w_roi, axis=1)
+
+        # Clip shift maps strictly to maximum movement radius of +-8.0 pixels to prevent pixel tearing
+        disp_x = np.clip(grad_x_norm * warp_strength, -8.0, 8.0)
+        disp_y = np.clip(grad_y_norm * warp_strength, -8.0, 8.0)
+
+        map_x = (map_x + disp_x).astype(np.float32)
+        map_y = (map_y + disp_y).astype(np.float32)
+
+        # Remap using Lanczos4 interpolation
+        warped = cv2.remap(
+            fabric_roi, map_x, map_y,
+            interpolation=cv2.INTER_LANCZOS4,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+        return warped
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  STEP 4 & 5 — Lighting Blend Layer (Soft-Light + Specular Guard + Laplacian)
     # ═════════════════════════════════════════════════════════════════════════
 
     def _lighting_blend(
         self,
-        fabric_np: np.ndarray,
-        room_np: np.ndarray,
-        mask_np: np.ndarray,
+        warped_roi: np.ndarray,
+        room_roi: np.ndarray,
+        mask_roi: np.ndarray,
     ) -> np.ndarray:
         """
-        Preserve shadows, folds, and highlights by mapping the luminance
-        details of the original image back over the newly textured surface
-        using a Soft Light blend mode.
-
-        Soft Light formula:
-          if overlay < 0.5:
-            result = 2 * base * overlay
-          else:
-            result = 1 - 2 * (1 - base) * (1 - overlay)
-
-        Where:
-          base = textured fabric (normalized to [0, 1])
-          overlay = original room luminance (normalized to [0, 1])
+        Blend original luminance back over the fabric using W3C Soft-Light
+        blending, applying CLAHE, Specular Glare Guard, and Laplacian Fold Enhancement.
         """
-        h, w = room_np.shape[:2]
+        h_roi, w_roi = room_roi.shape[:2]
 
-        # Extract luminance from original room image (under mask)
-        room_gray = cv2.cvtColor(room_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        # Extract original grayscale luma
+        room_gray = cv2.cvtColor(room_roi, cv2.COLOR_RGB2GRAY).astype(np.float32)
 
-        # Apply guided blur to remove the original pattern's high-frequency
-        # detail while preserving fold/shadow edges
-        room_smooth = cv2.GaussianBlur(room_gray, (31, 31), 0)
+        # Extract pattern-stripped luminance layer
+        room_smooth = cv2.bilateralFilter(room_gray.astype(np.uint8), d=9, sigmaColor=75, sigmaSpace=75)
+        room_smooth = cv2.GaussianBlur(room_smooth, (31, 31), 0).astype(np.float32)
 
-        # Compute relative luminance (normalized to region inside mask)
-        mask_bool = mask_np > 127
-        masked_luma = room_smooth[mask_bool]
+        # Process the pattern-stripped luma using CLAHE
+        room_smooth_uint8 = np.clip(room_smooth, 0, 255).astype(np.uint8)
+        if room_smooth_uint8.shape[0] >= 8 and room_smooth_uint8.shape[1] >= 8:
+            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+            clahe_luma = clahe.apply(room_smooth_uint8).astype(np.float32)
+        else:
+            clahe_luma = room_smooth_uint8.astype(np.float32)
+
+        # Specular Glare Guard: soft clamp intensities exceeding 240 on 0-255 scale
+        clahe_luma_clamped = np.where(
+            clahe_luma > 240.0,
+            240.0 + 15.0 * np.tanh((clahe_luma - 240.0) / 15.0),
+            clahe_luma
+        )
+
+        # Ambient normalization using 75th percentile of mask luma
+        mask_bool = mask_roi > 127
+        masked_luma = clahe_luma_clamped[mask_bool]
         if len(masked_luma) > 0:
             ref_brightness = float(np.percentile(masked_luma, 75))
             ref_brightness = np.clip(ref_brightness, 50.0, 230.0)
         else:
             ref_brightness = 180.0
 
-        # Normalize overlay to [0, 1]
-        overlay = room_smooth / (ref_brightness * 2.0)
+        # Normalize blend overlay (B) to [0.0, 1.0] domain
+        overlay = clahe_luma_clamped / (2.0 * ref_brightness + 1e-5)
         overlay = np.clip(overlay, 0.0, 1.0)
 
-        # Normalize fabric base to [0, 1]
-        base = fabric_np.astype(np.float32) / 255.0
 
-        # Expand overlay to 3 channels
+        # Expand overlay to [H_roi, W_roi, 1] to prevent shape mismatch with fabric float [H_roi, W_roi, 3]
         overlay_3ch = overlay[:, :, np.newaxis]
 
-        # Soft Light blend
-        result = np.where(
-            overlay_3ch < 0.5,
-            2.0 * base * overlay_3ch,
-            1.0 - 2.0 * (1.0 - base) * (1.0 - overlay_3ch),
+        # Normalize fabric base (A) to [0.0, 1.0] domain
+        base = warped_roi.astype(np.float32) / 255.0
+
+        # Vectorized W3C CSS Compositing Soft-Light Formulation
+        g_base = np.where(
+            base <= 0.25,
+            ((16.0 * base - 12.0) * base + 4.0) * base,
+            np.sqrt(np.maximum(base, 0.0))
         )
 
-        # Scale back to [0, 255]
-        result = np.clip(result * 255.0, 0, 255).astype(np.uint8)
+        blended = np.where(
+            overlay_3ch <= 0.5,
+            base - (1.0 - 2.0 * overlay_3ch) * base * (1.0 - base),
+            base + (2.0 * overlay_3ch - 1.0) * (g_base - base)
+        )
+        blended = np.clip(blended * 255.0, 0.0, 255.0)
 
-        return result
+        # ── Step 5: Laplacian-Based Fold Enhancement Overlay ─────────────────
+        # Extract crease detail from pattern-stripped luma
+        smoothed_lum = cv2.bilateralFilter(room_gray.astype(np.uint8), d=9, sigmaColor=75, sigmaSpace=75)
+        smoothed_lum = cv2.GaussianBlur(smoothed_lum, (5, 5), 1.0).astype(np.float32)
+
+        # Laplacian calculation
+        laplacian = cv2.Laplacian(smoothed_lum, cv2.CV_32F, ksize=3)
+
+        # Normalize crease details to [0.8, 1.2] range
+        contrast_layer = np.clip(1.0 - (laplacian * 0.005), 0.8, 1.2)
+        contrast_layer_3ch = contrast_layer[:, :, np.newaxis]
+
+        # Multiply back onto the final blended fabric texture profile
+        final_fabric = blended * contrast_layer_3ch
+        return np.clip(final_fabric, 0, 255).astype(np.uint8)
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  Final Composite
+    #  Final Composite (ROI Local)
     # ═════════════════════════════════════════════════════════════════════════
 
     def _composite(
         self,
-        room_np: np.ndarray,
-        fabric_np: np.ndarray,
-        mask_np: np.ndarray,
+        room_roi: np.ndarray,
+        fabric_roi: np.ndarray,
+        mask_roi: np.ndarray,
     ) -> np.ndarray:
         """
         Composite the textured fabric onto the room image using the mask.
-
-        Uses a feathered alpha blend at the mask boundary for smooth edges,
-        then hard-copies the interior for full opacity.
+        Uses a feathered alpha blend at the boundary for smooth edges.
         """
-        h, w = room_np.shape[:2]
+        h_roi, w_roi = room_roi.shape[:2]
 
         # Create a feathered alpha channel from the mask
-        mask_float = mask_np.astype(np.float32) / 255.0
+        mask_float = mask_roi.astype(np.float32) / 255.0
 
         # Gentle Gaussian feather at the boundary (3px radius)
         alpha = cv2.GaussianBlur(mask_float, (7, 7), 1.5)
         alpha_3ch = alpha[:, :, np.newaxis]
 
-        # Alpha blend: fabric where mask is white, room where mask is black
+        # Alpha blend
         result = (
-            fabric_np.astype(np.float32) * alpha_3ch
-            + room_np.astype(np.float32) * (1.0 - alpha_3ch)
+            fabric_roi.astype(np.float32) * alpha_3ch
+            + room_roi.astype(np.float32) * (1.0 - alpha_3ch)
         )
         return np.clip(result, 0, 255).astype(np.uint8)

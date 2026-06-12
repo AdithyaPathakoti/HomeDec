@@ -22,18 +22,30 @@ enum FabricCategory {
 extension FabricCategoryX on FabricCategory {
   String get label {
     switch (this) {
-      case FabricCategory.all:         return 'All';
-      case FabricCategory.floral:      return 'Floral';
-      case FabricCategory.velvet:      return 'Velvet';
-      case FabricCategory.cotton:      return 'Cotton';
-      case FabricCategory.silk:        return 'Silk';
-      case FabricCategory.geometric:   return 'Geometric';
-      case FabricCategory.luxury:      return 'Luxury';
-      case FabricCategory.traditional: return 'Traditional';
-      case FabricCategory.striped:     return 'Striped';
-      case FabricCategory.textured:    return 'Textured';
-      case FabricCategory.printed:     return 'Printed';
-      case FabricCategory.minimalist:  return 'Minimalist';
+      case FabricCategory.all:
+        return 'All';
+      case FabricCategory.floral:
+        return 'Floral';
+      case FabricCategory.velvet:
+        return 'Velvet';
+      case FabricCategory.cotton:
+        return 'Cotton';
+      case FabricCategory.silk:
+        return 'Silk';
+      case FabricCategory.geometric:
+        return 'Geometric';
+      case FabricCategory.luxury:
+        return 'Luxury';
+      case FabricCategory.traditional:
+        return 'Traditional';
+      case FabricCategory.striped:
+        return 'Striped';
+      case FabricCategory.textured:
+        return 'Textured';
+      case FabricCategory.printed:
+        return 'Printed';
+      case FabricCategory.minimalist:
+        return 'Minimalist';
     }
   }
 }
@@ -148,7 +160,11 @@ class BuiltinFabrics {
       material: 'Cotton',
       sku: 'VAS-FL-001',
       assetPath: 'assets/fabrics/floral_rose.jpg',
-      colorTags: [Colors.pink.shade300.value, Colors.green.shade300.value, Colors.white.value],
+      colorTags: [
+        Colors.pink.shade300.value,
+        Colors.green.shade300.value,
+        Colors.white.value
+      ],
       aiCompatScore: 94,
       origin: 'India',
       weaveType: 'Plain',
@@ -172,7 +188,11 @@ class BuiltinFabrics {
       material: 'Cotton Linen',
       sku: 'VAS-ST-001',
       assetPath: 'assets/fabrics/stripe_desert.jpg',
-      colorTags: [const Color(0xFFE8C88A).value, const Color(0xFFC4956A).value, Colors.white.value],
+      colorTags: [
+        const Color(0xFFE8C88A).value,
+        const Color(0xFFC4956A).value,
+        Colors.white.value
+      ],
       aiCompatScore: 88,
       origin: 'Morocco',
       weaveType: 'Twill',
@@ -184,7 +204,11 @@ class BuiltinFabrics {
       material: 'Polyester',
       sku: 'VAS-GE-001',
       assetPath: 'assets/fabrics/geometric_azure.jpg',
-      colorTags: [const Color(0xFF1E6FA8).value, Colors.white.value, const Color(0xFF0D3D5E).value],
+      colorTags: [
+        const Color(0xFF1E6FA8).value,
+        Colors.white.value,
+        const Color(0xFF0D3D5E).value
+      ],
       aiCompatScore: 92,
       origin: 'Turkey',
       weaveType: 'Jacquard',
@@ -244,7 +268,11 @@ class BuiltinFabrics {
       material: 'Silk Cotton',
       sku: 'VAS-TR-001',
       assetPath: 'assets/fabrics/paisley_traditional.jpg',
-      colorTags: [const Color(0xFF8B3A3A).value, const Color(0xFFE8A840).value, const Color(0xFF2A5A3A).value],
+      colorTags: [
+        const Color(0xFF8B3A3A).value,
+        const Color(0xFFE8A840).value,
+        const Color(0xFF2A5A3A).value
+      ],
       aiCompatScore: 93,
       origin: 'India',
       weaveType: 'Jacquard',
@@ -256,7 +284,11 @@ class BuiltinFabrics {
       material: 'Wool Blend',
       sku: 'VAS-TX-001',
       assetPath: 'assets/fabrics/herringbone_navy.jpg',
-      colorTags: [const Color(0xFF1A1A3E).value, const Color(0xFF2E3F6E).value, const Color(0xFFD4C5B0).value],
+      colorTags: [
+        const Color(0xFF1A1A3E).value,
+        const Color(0xFF2E3F6E).value,
+        const Color(0xFFD4C5B0).value
+      ],
       aiCompatScore: 87,
       origin: 'UK',
       weaveType: 'Herringbone',
@@ -268,7 +300,11 @@ class BuiltinFabrics {
       material: 'Cotton',
       sku: 'VAS-PR-001',
       assetPath: 'assets/fabrics/printed_blush.jpg',
-      colorTags: [const Color(0xFFF0C0C0).value, const Color(0xFFC8A0B0).value, Colors.white.value],
+      colorTags: [
+        const Color(0xFFF0C0C0).value,
+        const Color(0xFFC8A0B0).value,
+        Colors.white.value
+      ],
       aiCompatScore: 91,
       origin: 'India',
       weaveType: 'Plain',

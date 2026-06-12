@@ -45,9 +45,11 @@ class VastraProvider extends ChangeNotifier {
   bool get isPositiveSelectionMode => _isPositiveSelectionMode;
   Uint8List? get maskPreviewOverlay => _maskPreviewOverlay;
   Uint8List? get finalRenderedResult => _finalRenderedResult;
-  Uint8List? get resultImageBytes => _finalRenderedResult; // map to avoid breaking screens
+  Uint8List? get resultImageBytes =>
+      _finalRenderedResult; // map to avoid breaking screens
 
-  bool get isProcessing => _isProcessing || _status == ProcessingStatus.processing;
+  bool get isProcessing =>
+      _isProcessing || _status == ProcessingStatus.processing;
   bool get canGenerate =>
       _roomImageBytes != null &&
       _selectedProduct != null &&
@@ -64,7 +66,8 @@ class VastraProvider extends ChangeNotifier {
     } else {
       try {
         final tempDir = Directory.systemTemp;
-        final tempFile = File('${tempDir.path}/room_image_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        final tempFile = File(
+            '${tempDir.path}/room_image_${DateTime.now().millisecondsSinceEpoch}.jpg');
         tempFile.writeAsBytesSync(bytes);
         _roomImageFile = tempFile;
       } catch (e) {
@@ -125,7 +128,7 @@ class VastraProvider extends ChangeNotifier {
 
   /// Uploads room image to /api/upload to initialize session_id
   Future<void> uploadSessionImage() async {
-    if (_roomImageFile == null) throw Exception('No room image available.');
+    if (_roomImageBytes == null) throw Exception('No room image available.');
     _isProcessing = true;
     _status = ProcessingStatus.processing;
     _statusMessage = 'Uploading and encoding room image...';
@@ -133,7 +136,10 @@ class VastraProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final sessionId = await ApiService.instance.uploadRoomImage(_roomImageFile!);
+      final sessionId = await ApiService.instance.uploadRoomImage(
+        _roomImageBytes!,
+        'room_image.jpg',
+      );
       _currentSessionId = sessionId;
       _status = ProcessingStatus.idle;
       _statusMessage = 'Room uploaded.';
@@ -194,8 +200,10 @@ class VastraProvider extends ChangeNotifier {
   }
 
   /// Calls /api/render to project the fabric texture onto the segmented mask
-  Future<void> renderFinal(String fabricTextureId, {Uint8List? customFabricBytes}) async {
-    if (_currentSessionId == null) throw Exception('No active session. Please segment the room first.');
+  Future<void> renderFinal(String fabricTextureId,
+      {Uint8List? customFabricBytes}) async {
+    if (_currentSessionId == null)
+      throw Exception('No active session. Please segment the room first.');
     _isProcessing = true;
     _status = ProcessingStatus.processing;
     _statusMessage = 'Rendering fabric texture projection...';
@@ -234,7 +242,7 @@ class VastraProvider extends ChangeNotifier {
   /// Mock generate method representing a single-step run (uploads and renders).
   /// Included to prevent crashes or compile errors if called from older code.
   Future<void> generate() async {
-    if (_roomImageFile == null) return;
+    if (_roomImageBytes == null) return;
     _status = ProcessingStatus.processing;
     _statusMessage = 'Processing image...';
     _errorMessage = null;
@@ -250,7 +258,8 @@ class VastraProvider extends ChangeNotifier {
 
       // Step 3: Render using selected fabric
       if (_fabricImageBytes != null) {
-        await renderFinal('custom_fabric', customFabricBytes: _fabricImageBytes);
+        await renderFinal('custom_fabric',
+            customFabricBytes: _fabricImageBytes);
       } else {
         await renderFinal('bedsheet_pattern_1');
       }

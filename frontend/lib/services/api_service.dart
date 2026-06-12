@@ -25,14 +25,15 @@ class ApiService {
 
   /// 1. Sends the room image as a multipart request to /api/upload.
   /// Returns the generated session_id.
-  Future<String> uploadRoomImage(File imageFile) async {
+  Future<String> uploadRoomImage(Uint8List imageBytes, String filename) async {
     final uri = Uri.parse(
         '${VastraConstants.baseUrl}${VastraConstants.uploadEndpoint}');
     
     final request = http.MultipartRequest('POST', uri);
-    request.files.add(await http.MultipartFile.fromPath(
+    request.files.add(http.MultipartFile.fromBytes(
       'room_image',
-      imageFile.path,
+      imageBytes,
+      filename: filename,
       contentType: MediaType('image', 'jpeg'),
     ));
 

@@ -18,6 +18,7 @@ to native pixel dimensions before feeding to the SAM2 decoder.
 """
 
 import os
+import threading
 import numpy as np
 import torch
 import cv2
@@ -36,7 +37,7 @@ class InteractiveSAMEngine:
         embedding = engine.predict_encoder(image_np)
 
         # Step 2 – Run per user interaction (fast)
-        mask = engine.predict_decoder(
+        mask, logits = engine.predict_decoder(
             embedding,
             points=[{"x": 0.5, "y": 0.3, "label": 1}],
             image_size=(1024, 768)
@@ -65,6 +66,7 @@ class InteractiveSAMEngine:
 
         self.model_variant = model_variant
         self._predictor = None
+        self._lock = threading.Lock()
         print(f"[InteractiveSAMEngine] Initialized | variant={model_variant} | device={self.device}")
 
     # ── Lazy Model Loader ─────────────────────────────────────────────────────
@@ -203,17 +205,18 @@ class InteractiveSAMEngine:
         h, w = image_np.shape[:2]
         print(f"[InteractiveSAMEngine] Running encoder on image {w}x{h}...")
 
-        predictor = self._get_predictor()
+        with self._lock:
+            predictor = self._get_predictor()
 
-        # set_image runs the full encoder and stores internal features
-        predictor.set_image(image_np)
+            # set_image runs the full encoder and stores internal features
+            predictor.set_image(image_np)
 
-        # Extract the cached features from the predictor's internal state
-        embedding_data = {
-            "features": predictor._features,
-            "orig_hw": predictor._orig_hw,
-            "is_image_set": predictor._is_image_set,
-        }
+            # Extract the cached features from the predictor's internal state
+            embedding_data = {
+                "features": predictor._features,
+                "orig_hw": predictor._orig_hw,
+                "is_image_set": predictor._is_image_set,
+            }
 
         print(f"[InteractiveSAMEngine] Encoder complete.")
         return embedding_data
@@ -225,7 +228,8 @@ class InteractiveSAMEngine:
         image_embedding: dict,
         points: List[Dict],
         image_size: Tuple[int, int],
-    ) -> np.ndarray:
+        low_res_logits: Optional[np.ndarray] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Run the SAM2 Mask Decoder with interactive point prompts.
 
@@ -239,9 +243,12 @@ class InteractiveSAMEngine:
                     - "y": float in [0.0, 1.0] (normalized vertical position)
                     - "label": int, 1 = positive (foreground), 0 = negative (background)
             image_size: (H, W) tuple of the original image dimensions.
+            low_res_logits: Optional low-res logits from previous interaction turn.
 
         Returns:
-            np.ndarray: Binary mask (H, W), dtype uint8, where 255 = foreground.
+            Tuple[np.ndarray, np.ndarray]:
+                - mask_uint8: Binary mask (H, W), dtype uint8, where 255 = foreground.
+                - best_logits: Low-res logits tensor from the best candidate mask.
         """
         if not points:
             raise ValueError("At least one point prompt is required.")
@@ -249,50 +256,70 @@ class InteractiveSAMEngine:
         h, w = image_size
         print(f"[InteractiveSAMEngine] Running decoder with {len(points)} point(s)...")
 
-        predictor = self._get_predictor()
+        with self._lock:
+            predictor = self._get_predictor()
 
-        # Restore the cached encoder state into the predictor
-        predictor._features = image_embedding["features"]
-        predictor._orig_hw = image_embedding["orig_hw"]
-        predictor._is_image_set = image_embedding["is_image_set"]
+            # Restore the cached encoder state into the predictor
+            predictor._features = image_embedding["features"]
+            predictor._orig_hw = image_embedding["orig_hw"]
+            predictor._is_image_set = image_embedding["is_image_set"]
 
-        # ── Map normalized [0.0–1.0] coordinates to pixel space ──────────────
-        point_coords = []
-        point_labels = []
+            # ── Map normalized [0.0–1.0] coordinates to pixel space ──────────────
+            point_coords = []
+            point_labels = []
 
-        for pt in points:
-            px_x = pt["x"] * w
-            px_y = pt["y"] * h
-            label = int(pt["label"])
+            for pt in points:
+                px_x = pt["x"] * w
+                px_y = pt["y"] * h
+                label = int(pt["label"])
 
-            # Clamp to valid pixel range
-            px_x = max(0.0, min(float(w - 1), px_x))
-            px_y = max(0.0, min(float(h - 1), px_y))
+                # Clamp to valid pixel range
+                px_x = max(0.0, min(float(w - 1), px_x))
+                px_y = max(0.0, min(float(h - 1), px_y))
 
-            point_coords.append([px_x, px_y])
-            point_labels.append(label)
+                point_coords.append([px_x, px_y])
+                point_labels.append(label)
 
-        point_coords_np = np.array(point_coords, dtype=np.float32)
-        point_labels_np = np.array(point_labels, dtype=np.int32)
+            point_coords_np = np.array(point_coords, dtype=np.float32)
+            point_labels_np = np.array(point_labels, dtype=np.int32)
 
-        print(f"[InteractiveSAMEngine] Mapped points (px): {point_coords_np.tolist()}")
-        print(f"[InteractiveSAMEngine] Labels: {point_labels_np.tolist()}")
+            print(f"[InteractiveSAMEngine] Mapped points (px): {point_coords_np.tolist()}")
+            print(f"[InteractiveSAMEngine] Labels: {point_labels_np.tolist()}")
 
-        # ── Run the decoder ──────────────────────────────────────────────────
-        masks, scores, logits = predictor.predict(
-            point_coords=point_coords_np,
-            point_labels=point_labels_np,
-            multimask_output=True,
-        )
+            # ── Run the decoder ──────────────────────────────────────────────────
+            if low_res_logits is not None:
+                # Ensure mask_input has shape (1, H_logits, W_logits) as expected by SAM2
+                if low_res_logits.ndim == 2:
+                    mask_input = low_res_logits[None, :, :]
+                elif low_res_logits.ndim == 3 and low_res_logits.shape[0] == 1:
+                    mask_input = low_res_logits
+                else:
+                    mask_input = low_res_logits[None, :, :]
 
-        # Select the mask with the highest confidence score
-        best_idx = int(np.argmax(scores))
-        best_mask = masks[best_idx]
-        best_score = float(scores[best_idx])
+                masks, scores, logits = predictor.predict(
+                    point_coords=point_coords_np,
+                    point_labels=point_labels_np,
+                    mask_input=mask_input,
+                    multimask_output=False,
+                )
+                best_mask = masks[0]
+                best_logits = logits[0]
+                best_score = float(scores[0])
+                best_idx = 0
+            else:
+                masks, scores, logits = predictor.predict(
+                    point_coords=point_coords_np,
+                    point_labels=point_labels_np,
+                    multimask_output=True,
+                )
+                best_idx = int(np.argmax(scores))
+                best_mask = masks[best_idx]
+                best_logits = logits[best_idx]
+                best_score = float(scores[best_idx])
 
-        print(f"[InteractiveSAMEngine] Decoder complete. "
-              f"Best mask idx={best_idx}, score={best_score:.4f}, "
-              f"masks returned={len(masks)}")
+            print(f"[InteractiveSAMEngine] Decoder complete. "
+                  f"Best mask idx={best_idx}, score={best_score:.4f}, "
+                  f"masks returned={len(masks)}, logits shape={best_logits.shape}")
 
         # Convert boolean mask to uint8 binary (0 or 255)
         mask_uint8 = (best_mask > 0).astype(np.uint8) * 255
@@ -306,7 +333,7 @@ class InteractiveSAMEngine:
         coverage = np.count_nonzero(mask_uint8) / (h * w) * 100
         print(f"[InteractiveSAMEngine] Mask coverage: {coverage:.2f}%")
 
-        return mask_uint8
+        return mask_uint8, best_logits
 
     # ── Utility: Generate Preview Overlay ─────────────────────────────────────
 
