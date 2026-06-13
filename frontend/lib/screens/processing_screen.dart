@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
@@ -14,6 +14,7 @@ class ProcessingScreen extends StatefulWidget {
 }
 
 class _ProcessingScreenState extends State<ProcessingScreen> {
+  final List<Offset> _currentStrokePoints = [];
   @override
   void initState() {
     super.initState();
@@ -40,19 +41,51 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
     if (provider.isProcessing) return;
 
     final localPosition = details.localPosition;
-    final normalizedX = localPosition.dx / constraints.maxWidth;
-    final normalizedY = localPosition.dy / constraints.maxHeight;
 
-    provider.addInteractiveTap(normalizedX, normalizedY).catchError((error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Segmentation error: $error'),
-            backgroundColor: Colors.red[900],
-          ),
-        );
+    // Check if the tap is close to an existing point to delete it
+    int clickedPointIndex = -1;
+    const double clickThreshold = 24.0; // logical pixels
+
+    for (int i = 0; i < provider.interactivePoints.length; i++) {
+      final pt = provider.interactivePoints[i];
+      final double ptX = pt['x'] * constraints.maxWidth;
+      final double ptY = pt['y'] * constraints.maxHeight;
+      final double dx = localPosition.dx - ptX;
+      final double dy = localPosition.dy - ptY;
+      final double distance = sqrt(dx * dx + dy * dy);
+
+      if (distance < clickThreshold) {
+        clickedPointIndex = i;
+        break;
       }
-    });
+    }
+
+    if (clickedPointIndex != -1) {
+      provider.removeInteractiveTapAt(clickedPointIndex).catchError((error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error removing point: $error'),
+              backgroundColor: Colors.red[900],
+            ),
+          );
+        }
+      });
+    } else {
+      final normalizedX = localPosition.dx / constraints.maxWidth;
+      final normalizedY = localPosition.dy / constraints.maxHeight;
+
+      provider.addInteractiveTap(normalizedX, normalizedY).catchError((error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Segmentation error: $error'),
+              backgroundColor: Colors.red[900],
+            ),
+          );
+        }
+      });
+    }
   }
 
   void _onProceed() {
@@ -72,7 +105,6 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<VastraProvider>();
-    final size = MediaQuery.of(context).size;
 
     return Scaffold(
       backgroundColor: VastraColors.background,
@@ -109,11 +141,13 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 16),
-                          _buildInteractiveCanvas(provider),
+                          Flexible(
+                            child: _buildInteractiveCanvas(provider),
+                          ),
                           const SizedBox(height: 12),
                           if (provider.interactivePoints.isNotEmpty)
                             Text(
-                              '${provider.interactivePoints.length} point(s) placed',
+                              '${provider.interactivePoints.length} point(s) placed • Tap a point to delete it',
                               style: TextStyle(
                                 color: VastraColors.warmGray.withOpacity(0.7),
                                 fontSize: 12,
@@ -221,7 +255,34 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 return GestureDetector(
-                  onTapUp: (details) => _onCanvasTap(details, constraints),
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: provider.isBrushMode ? null : (details) => _onCanvasTap(details, constraints),
+                  onPanStart: provider.isBrushMode ? (details) {
+                    setState(() {
+                      _currentStrokePoints.clear();
+                      _currentStrokePoints.add(details.localPosition);
+                    });
+                  } : null,
+                  onPanUpdate: provider.isBrushMode ? (details) {
+                    setState(() {
+                      _currentStrokePoints.add(details.localPosition);
+                    });
+                  } : null,
+                  onPanEnd: provider.isBrushMode ? (details) async {
+                    if (_currentStrokePoints.isEmpty) return;
+                    final pts = List<Offset>.from(_currentStrokePoints);
+                    setState(() {
+                      _currentStrokePoints.clear();
+                    });
+                    await provider.applyPaintStrokes(
+                      pts,
+                      provider.isBrushAdd,
+                      provider.brushSize,
+                      constraints.maxWidth,
+                      constraints.maxHeight,
+                    );
+                    await provider.uploadLocalMask();
+                  } : null,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -238,38 +299,51 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                           fit: BoxFit.fill,
                         ),
 
-                      // Interaction Coordinates / Dots
-                      ...provider.interactivePoints.map((pt) {
-                        final double posX = pt['x'] * constraints.maxWidth;
-                        final double posY = pt['y'] * constraints.maxHeight;
-                        final bool isPositive = pt['label'] == 1;
-
-                        return Positioned(
-                          left: posX - 10,
-                          top: posY - 10,
-                          child: Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isPositive ? Colors.green.withOpacity(0.85) : Colors.red.withOpacity(0.85),
-                              border: Border.all(color: Colors.white, width: 2.0),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.4),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                )
-                              ],
-                            ),
-                            child: Icon(
-                              isPositive ? Icons.add : Icons.remove,
-                              size: 10,
-                              color: Colors.white,
+                      // Real-time brush stroke overlay
+                      if (_currentStrokePoints.isNotEmpty)
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: BrushStrokePainter(
+                              points: _currentStrokePoints,
+                              isAdd: provider.isBrushAdd,
+                              brushSize: provider.brushSize,
                             ),
                           ),
-                        );
-                      }),
+                        ),
+
+                      // Interaction Coordinates / Dots
+                      if (!provider.isBrushMode)
+                        ...provider.interactivePoints.map((pt) {
+                          final double posX = pt['x'] * constraints.maxWidth;
+                          final double posY = pt['y'] * constraints.maxHeight;
+                          final bool isPositive = pt['label'] == 1;
+
+                          return Positioned(
+                            left: posX - 10,
+                            top: posY - 10,
+                            child: Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isPositive ? Colors.green.withOpacity(0.85) : Colors.red.withOpacity(0.85),
+                                border: Border.all(color: Colors.white, width: 2.0),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.4),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  )
+                                ],
+                              ),
+                              child: Icon(
+                                isPositive ? Icons.add : Icons.remove,
+                                size: 10,
+                                color: Colors.white,
+                              ),
+                            ),
+                          );
+                        }),
                     ],
                   ),
                 );
@@ -280,9 +354,8 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       ),
     );
   }
-
   Widget _buildControlToolbar(VastraProvider provider) {
-    final hasPoints = provider.interactivePoints.isNotEmpty;
+    final hasPoints = provider.interactivePoints.isNotEmpty || provider.maskPreviewOverlay != null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -294,78 +367,208 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Row 1: Mode Switch & Reset
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Positive / Negative Toggle
-              Row(
+          if (provider.isBrushMode) ...[
+            // Brush mode controls
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.brush_rounded, color: VastraColors.gold, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Brush Mode',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: VastraColors.ivory,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ],
+                ),
+                TextButton.icon(
+                  onPressed: () => provider.toggleBrushMode(),
+                  icon: const Icon(Icons.touch_app_rounded, size: 14, color: VastraColors.gold),
+                  label: const Text('Back to Taps', style: TextStyle(color: VastraColors.gold, fontSize: 12)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                ChoiceChip(
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.add_circle_outline_rounded, size: 14, color: Colors.green),
+                      SizedBox(width: 4),
+                      Text('Brush Add', style: TextStyle(fontSize: 12, color: Colors.white)),
+                    ],
+                  ),
+                  selected: provider.isBrushAdd,
+                  onSelected: (_) => provider.setBrushAdd(true),
+                  selectedColor: VastraColors.gold.withOpacity(0.25),
+                  backgroundColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: provider.isBrushAdd ? VastraColors.gold : VastraColors.borderLight,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.remove_circle_outline_rounded, size: 14, color: Colors.red),
+                      SizedBox(width: 4),
+                      Text('Brush Erase', style: TextStyle(fontSize: 12, color: Colors.white)),
+                    ],
+                  ),
+                  selected: !provider.isBrushAdd,
+                  onSelected: (_) => provider.setBrushAdd(false),
+                  selectedColor: VastraColors.gold.withOpacity(0.25),
+                  backgroundColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: !provider.isBrushAdd ? VastraColors.gold : VastraColors.borderLight,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(
+                  'Size: ${provider.brushSize.round()}px',
+                  style: const TextStyle(color: VastraColors.warmGray, fontSize: 12),
+                ),
+                Expanded(
+                  child: Slider(
+                    value: provider.brushSize,
+                    min: 5.0,
+                    max: 60.0,
+                    divisions: 11,
+                    activeColor: VastraColors.gold,
+                    inactiveColor: VastraColors.borderLight,
+                    onChanged: (val) => provider.setBrushSize(val),
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            // Row 1: Mode Switch & Reset (Wrapped to prevent overflow)
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Text(
-                    'Tap Mode:',
-                    style: TextStyle(
-                      color: VastraColors.warmGray.withOpacity(0.8),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.add_circle_outline_rounded, size: 14, color: Colors.green),
-                        SizedBox(width: 4),
-                        Text('Add Zone', style: TextStyle(fontSize: 12, color: Colors.white)),
-                      ],
-                    ),
-                    selected: provider.isPositiveSelectionMode,
-                    onSelected: (_) => provider.toggleSelectionMode(),
-                    selectedColor: VastraColors.gold.withOpacity(0.25),
-                    backgroundColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: provider.isPositiveSelectionMode
-                            ? VastraColors.gold
-                            : VastraColors.borderLight,
+                  // Positive / Negative Toggle
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        'Tap Mode:',
+                        style: TextStyle(
+                          color: VastraColors.warmGray.withOpacity(0.8),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  ChoiceChip(
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.remove_circle_outline_rounded, size: 14, color: Colors.red),
-                        SizedBox(width: 4),
-                        Text('Remove', style: TextStyle(fontSize: 12, color: Colors.white)),
-                      ],
-                    ),
-                    selected: !provider.isPositiveSelectionMode,
-                    onSelected: (_) => provider.toggleSelectionMode(),
-                    selectedColor: VastraColors.gold.withOpacity(0.25),
-                    backgroundColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: !provider.isPositiveSelectionMode
-                            ? VastraColors.gold
-                            : VastraColors.borderLight,
+                      ChoiceChip(
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.add_circle_outline_rounded, size: 14, color: Colors.green),
+                            SizedBox(width: 4),
+                            Text('Add Zone', style: TextStyle(fontSize: 12, color: Colors.white)),
+                          ],
+                        ),
+                        selected: provider.isPositiveSelectionMode,
+                        onSelected: (_) => provider.toggleSelectionMode(),
+                        selectedColor: VastraColors.gold.withOpacity(0.25),
+                        backgroundColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: provider.isPositiveSelectionMode
+                                ? VastraColors.gold
+                                : VastraColors.borderLight,
+                          ),
+                        ),
                       ),
-                    ),
+                      ChoiceChip(
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.remove_circle_outline_rounded, size: 14, color: Colors.red),
+                            SizedBox(width: 4),
+                            Text('Remove', style: TextStyle(fontSize: 12, color: Colors.white)),
+                          ],
+                        ),
+                        selected: !provider.isPositiveSelectionMode,
+                        onSelected: (_) => provider.toggleSelectionMode(),
+                        selectedColor: VastraColors.gold.withOpacity(0.25),
+                        backgroundColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: !provider.isPositiveSelectionMode
+                                ? VastraColors.gold
+                                : VastraColors.borderLight,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+    
+                  // Undo & Reset Buttons
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (provider.maskPreviewOverlay != null) ...[
+                        IconButton(
+                          icon: const Icon(Icons.brush_rounded, color: VastraColors.gold),
+                          tooltip: 'Paint Corrections',
+                          onPressed: () => provider.toggleBrushMode(),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      IconButton(
+                        icon: const Icon(Icons.undo_rounded, color: VastraColors.gold),
+                        tooltip: 'Undo Last Tap',
+                        onPressed: hasPoints && !provider.isProcessing
+                            ? () => provider.undoLastTap().catchError((error) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error performing undo: $error'),
+                                      backgroundColor: Colors.red[900],
+                                    ),
+                                  );
+                                }
+                              })
+                            : null,
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded, color: VastraColors.gold),
+                        tooltip: 'Reset Taps',
+                        onPressed: hasPoints && !provider.isProcessing ? () => provider.resetTaps() : null,
+                      ),
+                    ],
                   ),
                 ],
               ),
-
-              // Reset Button
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded, color: VastraColors.gold),
-                tooltip: 'Reset Taps',
-                onPressed: hasPoints ? () => provider.resetTaps() : null,
-              ),
-            ],
-          ),
+            ),
+          ],
 
           const SizedBox(height: 16),
 
@@ -447,4 +650,48 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       ),
     );
   }
+}
+
+// ── Brush Stroke Painter ─────────────────────────────────────────────────────
+
+class BrushStrokePainter extends CustomPainter {
+  final List<Offset> points;
+  final bool isAdd;
+  final double brushSize;
+
+  BrushStrokePainter({
+    required this.points,
+    required this.isAdd,
+    required this.brushSize,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+    
+    final paint = Paint()
+      ..color = isAdd ? Colors.green.withOpacity(0.55) : Colors.red.withOpacity(0.55)
+      ..strokeWidth = brushSize
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    if (points.length > 1) {
+      final path = Path();
+      path.moveTo(points.first.dx, points.first.dy);
+      for (int i = 1; i < points.length; i++) {
+        path.lineTo(points[i].dx, points[i].dy);
+      }
+      canvas.drawPath(path, paint);
+    } else {
+      canvas.drawCircle(
+        points.first,
+        brushSize / 2,
+        Paint()..color = paint.color,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant BrushStrokePainter oldDelegate) => true;
 }

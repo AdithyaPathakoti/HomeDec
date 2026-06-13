@@ -413,12 +413,41 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
 
   Widget _buildBottomAction() {
     final canVisualize = _selectedFabric != null;
+    final provider = context.watch<VastraProvider>();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           VastraConstants.pagePadding, 8, VastraConstants.pagePadding, 28),
       child: Column(
         children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.auto_awesome_rounded, size: 18, color: VastraColors.gold),
+                  SizedBox(width: 8),
+                  Text(
+                    'AI Diffusion Refinement',
+                    style: TextStyle(
+                      color: VastraColors.ivory,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              Switch(
+                value: provider.refineWithDiffusion,
+                onChanged: (val) => provider.toggleDiffusionRefinement(),
+                activeColor: VastraColors.gold,
+                activeTrackColor: VastraColors.gold.withOpacity(0.3),
+                inactiveThumbColor: VastraColors.warmGray,
+                inactiveTrackColor: VastraColors.borderLight,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           if (_selectedFabric != null) ...[
             _buildSelectedFabricChip(),
             const SizedBox(height: 12),

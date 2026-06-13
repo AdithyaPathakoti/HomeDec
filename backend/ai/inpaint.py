@@ -40,7 +40,7 @@ class InpaintService:
                     print(f"All cloud API connection attempts failed: {ex}")
                     raise ex
 
-    def run_inpaint(self, image_path: str, mask_path: str, prompt: str, output_path: str) -> str:
+    def run_inpaint(self, image_path: str, mask_path: str, prompt: str, output_path: str, strength: float = 0.20) -> str:
         # Ensure client is loaded
         self.load_model()
         
@@ -49,7 +49,7 @@ class InpaintService:
         orig_mask = load_image(mask_path).convert("L") # Convert mask to grayscale
         orig_size = orig_image.size
         
-        print(f"Sending inpainting request to cloud ({self.model_id}). Prompt: '{prompt}'")
+        print(f"Sending inpainting request to cloud ({self.model_id}). Prompt: '{prompt}' | Strength: {strength}")
         
         try:
             # Prepare inputs according to the Gradio 4 Imageeditor specification
@@ -89,7 +89,7 @@ class InpaintService:
                     negative_prompt=negative_prompt,
                     guidance_scale=7.5,
                     steps=20,
-                    strength=0.99,
+                    strength=strength,
                     scheduler="EulerDiscreteScheduler",
                     api_name="/predict"
                 )
@@ -178,7 +178,7 @@ class InpaintService:
             tile_size = max(64, min(512, bbox_w // 4))
         else:
             tile_size = 256
-        print(f"[run_pattern_blend] Phase 1 – tile_size={tile_size}px")
+        print(f"[run_pattern_blend] Phase 1 - tile_size={tile_size}px")
 
         pattern_resized = pattern_image.resize((tile_size, tile_size), Image.Resampling.LANCZOS)
         tiled_image     = Image.new("RGB", (w, h))
@@ -203,7 +203,7 @@ class InpaintService:
         # only the large-scale gradient changes from real creases and shadows.
         blur_r     = max(21, (bbox_w // 8) | 1)   # round up to odd
         macro_luma = cv2.GaussianBlur(room_luma, (blur_r, blur_r), 0)
-        print(f"[run_pattern_blend] Phase 2 – Macro blur radius: {blur_r}px")
+        print(f"[run_pattern_blend] Phase 2 - Macro blur radius: {blur_r}px")
         if verify_dir:
             luma_vis = np.clip(macro_luma, 0, 255).astype(np.uint8)
             luma_path = os.path.join(verify_dir, "luminance_map.png")
@@ -215,11 +215,11 @@ class InpaintService:
         inside_macro = macro_luma[mask_bool]
         mean_macro   = float(np.mean(inside_macro)) if len(inside_macro) > 0 else 128.0
         mean_macro   = max(mean_macro, 30.0)
-        print(f"[run_pattern_blend] Phase 3 – Mean macro-luma inside mask: {mean_macro:.1f}")
+        print(f"[run_pattern_blend] Phase 3 - Mean macro-luma inside mask: {mean_macro:.1f}")
 
-        # fold = 1.0 → average surface, no change to new fabric colour.
-        # fold < 1.0 → real shadow/fold, darkens the new fabric naturally.
-        # fold > 1.0 → genuine highlight, brightens slightly.
+        # fold = 1.0 -> average surface, no change to new fabric colour.
+        # fold < 1.0 -> real shadow/fold, darkens the new fabric naturally.
+        # fold > 1.0 -> genuine highlight, brightens slightly.
         rel_fold_map = macro_luma / mean_macro
         rel_fold_map = np.clip(rel_fold_map, 0.55, 1.15)
 
@@ -231,7 +231,7 @@ class InpaintService:
         relit_np     = np.clip(relit_np, 0, 255).astype(np.uint8)
 
         mean_rgb = relit_np[mask_bool].mean(axis=0)
-        print(f"[run_pattern_blend] Phase 4 – Relit fabric mean RGB inside mask: "
+        print(f"[run_pattern_blend] Phase 4 - Relit fabric mean RGB inside mask: "
               f"R={mean_rgb[0]:.1f} G={mean_rgb[1]:.1f} B={mean_rgb[2]:.1f}")
 
         # ── Phase 5: Hard-Binary Pixel-Perfect Compositing ───────────────────

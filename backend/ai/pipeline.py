@@ -1,5 +1,5 @@
 """
-TextureProjectionEngine – Photorealistic Fabric Texture Projection
+TextureProjectionEngine - Photorealistic Fabric Texture Projection
 =====================================================================
 
 Rewritten from scratch using OpenCV and NumPy to map replacement fabrics
@@ -9,20 +9,43 @@ Pipeline Steps:
   1. Texture Tiling — tile the fabric pattern across mask bounding dimensions.
   2. Planar Perspective Mapping — spatial transform for flat categories
      (Rug, Bedsheet) so pattern lines shrink as they recede into the background.
-  3. Luminance Displacement Warping — shift/warp pattern lines over wrinkles,
-     curves, and organic folds using the original image's intensity gradients.
+  3. Depth/Luminance Displacement Warping — shift/warp pattern lines over wrinkles,
+     curves, and organic folds using depth maps or intensity gradients.
   4. Lighting Blend Layer — preserve shadows, folds, and highlights using a
-     Soft Light blend mode with the original luminance.
+     relative lightness shading map.
 """
 
 import cv2
 import numpy as np
 from PIL import Image
 from typing import Optional, Tuple
+import hashlib
+
+try:
+    from .depth import DepthEstimator
+except ImportError:
+    DepthEstimator = None
 
 
 # ── Categories that receive planar perspective correction ─────────────────────
 FLAT_CATEGORIES = {"bedsheets", "carpets", "rugs", "rug"}
+
+
+def order_points(pts: np.ndarray) -> np.ndarray:
+    """
+    Order points in: top-left, top-right, bottom-right, bottom-left order.
+    """
+    xSorted = pts[np.argsort(pts[:, 0]), :]
+    leftMost = xSorted[:2, :]
+    rightMost = xSorted[2:, :]
+
+    leftMost = leftMost[np.argsort(leftMost[:, 1]), :]
+    (tl, bl) = leftMost
+
+    rightMost = rightMost[np.argsort(rightMost[:, 1]), :]
+    (tr, br) = rightMost
+
+    return np.array([tl, tr, br, bl], dtype="float32")
 
 
 class TextureProjectionEngine:
@@ -38,8 +61,40 @@ class TextureProjectionEngine:
         result = engine.render(room_np, mask_np, fabric_np, "bedsheets")
     """
 
-    def __init__(self):
-        print("[TextureProjectionEngine] Initialized.")
+    def __init__(
+        self,
+        device: Optional[str] = None,
+        feather_ksize: int = 15,
+        feather_sigma: float = 4.0,
+        wrinkle_weight: float = 0.15,
+        displacement_scale: float = 5.0,
+        enable_guided_feather: bool = True,
+    ):
+        """
+        Initialize the TextureProjectionEngine.
+
+        Args:
+            device: Hardware device ('cuda' or 'cpu'). Auto-detected if None.
+            feather_ksize: Gaussian blur kernel size for mask feathering.
+            feather_sigma: Gaussian blur standard deviation for mask feathering.
+            wrinkle_weight: Blending factor for reintroducing fine wrinkles.
+            displacement_scale: Scaling factor for displacement warping.
+            enable_guided_feather: Whether to use guided filter for edge-preserving feathering.
+        """
+        self.feather_ksize = feather_ksize
+        self.feather_sigma = feather_sigma
+        self.wrinkle_weight = wrinkle_weight
+        self.displacement_scale = displacement_scale
+        self.enable_guided_feather = enable_guided_feather
+
+        self.depth_estimator = None
+        self.use_depth = False
+        if DepthEstimator is not None:
+            self.depth_estimator = DepthEstimator(device=device)
+            # Try loading the model; if it succeeds, set use_depth=True
+            self.use_depth = self.depth_estimator.load_model()
+            
+        print(f"[TextureProjectionEngine] Initialized. use_depth={self.use_depth} | feather_ksize={feather_ksize} | wrinkle_weight={wrinkle_weight}")
 
     # ═════════════════════════════════════════════════════════════════════════
     #  PUBLIC API
@@ -51,6 +106,7 @@ class TextureProjectionEngine:
         mask_np: np.ndarray,
         fabric_np: np.ndarray,
         product_category: str,
+        session_id: Optional[str] = None,
     ) -> np.ndarray:
         """
         Full photorealistic texture projection pipeline.
@@ -60,12 +116,19 @@ class TextureProjectionEngine:
             mask_np: Binary mask (H, W), dtype uint8, 255 = target region.
             fabric_np: Fabric texture swatch (Hf, Wf, 3), dtype uint8, RGB.
             product_category: Product type string (e.g. "bedsheets", "curtains").
+            session_id: Optional string for deterministic random transformations.
 
         Returns:
             np.ndarray: Composited result image (H, W, 3), dtype uint8, RGB.
         """
         import time
         h, w = room_np.shape[:2]
+        print(
+            f"[TextureProjectionEngine] render() - "
+            f"room={w}x{h}, category='{product_category}', "
+            f"fabric={fabric_np.shape[1]}x{fabric_np.shape[0]}, "
+            f"session_id={session_id}"
+        )
 
         # Guard: empty mask check
         if mask_np.max() == 0:
@@ -128,6 +191,15 @@ class TextureProjectionEngine:
         # ── Step 4 & 5: Lighting Blend Layer (ROI Local) ─────────────────────
         t0 = time.perf_counter()
         blended_roi = self._lighting_blend(warped_roi, room_roi, mask_roi)
+        
+        # ── Step 4.2: Pillow Shadows Preservation (ROI Local) ────────────────
+        blended_roi = self._preserve_pillow_shadows(blended_roi, room_roi, mask_roi)
+        
+        # ── Step 4.5: Wrinkle Preservation (ROI Local) ───────────────────────
+        blended_roi = self._preserve_wrinkles(blended_roi, room_roi, mask_roi)
+        
+        # ── Step 4.7: Local Variation (ROI Local) ────────────────────────────
+        blended_roi = self._add_local_variation(blended_roi, mask_roi)
         t_blend = time.perf_counter() - t0
 
         # ── Step 6: ROI feathered compositing ────────────────────────────────
@@ -374,7 +446,6 @@ class TextureProjectionEngine:
         overlay = clahe_luma_clamped / (2.0 * ref_brightness + 1e-5)
         overlay = np.clip(overlay, 0.0, 1.0)
 
-
         # Expand overlay to [H_roi, W_roi, 1] to prevent shape mismatch with fabric float [H_roi, W_roi, 3]
         overlay_3ch = overlay[:, :, np.newaxis]
 
@@ -412,6 +483,144 @@ class TextureProjectionEngine:
         return np.clip(final_fabric, 0, 255).astype(np.uint8)
 
     # ═════════════════════════════════════════════════════════════════════════
+    #  STEP 4.2 — Pillow Shadows Preservation
+    # ═════════════════════════════════════════════════════════════════════════
+
+    def _preserve_pillow_shadows(
+        self,
+        fabric_roi: np.ndarray,
+        room_roi: np.ndarray,
+        mask_roi: np.ndarray,
+    ) -> np.ndarray:
+        """
+        Extract low-frequency shadows from the original image (e.g. pillow shadows)
+        and apply them to the fabric texture.
+        """
+        mask_bool = mask_roi > 127
+        if not np.any(mask_bool):
+            return fabric_roi
+
+        # Convert to grayscale and normalize
+        gray = cv2.cvtColor(room_roi, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
+        
+        # Extract low-frequency shadows using a very large blur kernel
+        h_roi, w_roi = room_roi.shape[:2]
+        kernel_size = max(51, (min(h_roi, w_roi) // 10) | 1)
+        shadow_blur = cv2.GaussianBlur(gray, (kernel_size, kernel_size), 0)
+        
+        # Find the reference bright area inside the mask
+        ref_bright = float(np.percentile(shadow_blur[mask_bool], 90))
+        ref_bright = max(ref_bright, 0.1)
+        
+        # Calculate shadow map (relative to reference bright level)
+        shadow_map = shadow_blur / ref_bright
+        
+        # Clamp to reasonable values so we don't completely black out or brighten
+        # Allow shadows to go down to 0.55 (to preserve deep pillow shadows)
+        shadow_map = np.clip(shadow_map, 0.55, 1.0)
+        
+        # Apply only within the mask
+        mask_float = mask_bool.astype(np.float32)
+        blend_shadow = shadow_map * mask_float + (1.0 - mask_float)
+        
+        result = fabric_roi.astype(np.float32) * blend_shadow[:, :, np.newaxis]
+        return np.clip(result, 0, 255).astype(np.uint8)
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  STEP 4.5 — Wrinkle Preservation
+    # ═════════════════════════════════════════════════════════════════════════
+
+    def _preserve_wrinkles(
+        self,
+        lit_fabric_roi: np.ndarray,
+        room_roi: np.ndarray,
+        mask_roi: np.ndarray,
+    ) -> np.ndarray:
+        """
+        Extract high-frequency wrinkles from the original room image region
+        and reintroduce them into the projected fabric texture.
+        """
+        if self.wrinkle_weight <= 0.0:
+            return lit_fabric_roi
+
+        # 1. Convert room image to grayscale
+        gray = cv2.cvtColor(room_roi, cv2.COLOR_RGB2GRAY).astype(np.float32)
+
+        # 2. Gaussian blur to extract low frequencies using a large (31, 31) kernel
+        low_freq = cv2.GaussianBlur(gray, (31, 31), 0)
+
+        # 3. High-pass filter to extract fine wrinkles and normalize
+        wrinkles = (gray - low_freq) / 255.0
+
+        # 4. Reintroduce wrinkles inside the mask region
+        mask_float = (mask_roi > 127).astype(np.float32)
+        
+        # Apply: fabric *= (1 + 0.12 * wrinkles)
+        factor = 1.0 + 0.12 * wrinkles * mask_float
+
+        # Multiply onto the fabric pattern and clamp limits
+        result = lit_fabric_roi.astype(np.float32) * factor[:, :, np.newaxis]
+        return np.clip(result, 0, 255).astype(np.uint8)
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  STEP 4.7 — Local Variation
+    # ═════════════════════════════════════════════════════════════════════════
+
+    def _add_local_variation(self, fabric_roi: np.ndarray, mask_roi: np.ndarray) -> np.ndarray:
+        """
+        Add subtle local texture variation (noise) to make the fabric look less
+        computer-generated.
+        """
+        h_roi, w_roi = fabric_roi.shape[:2]
+        
+        # Generate random normal noise
+        noise = np.random.randn(h_roi, w_roi).astype(np.float32)
+        
+        # Smooth the noise to get low-frequency variations
+        noise_smooth = cv2.GaussianBlur(noise, (15, 15), 0)
+        
+        # Normalize the noise to range [-1.0, 1.0] roughly
+        max_val = np.max(np.abs(noise_smooth))
+        if max_val > 0:
+            noise_smooth /= max_val
+            
+        # Apply: fabric *= (0.98 + 0.04 * noise) inside the mask
+        mask_float = (mask_roi > 127).astype(np.float32)
+        factor = 0.98 + 0.04 * noise_smooth * mask_float
+        
+        result = fabric_roi.astype(np.float32) * factor[:, :, np.newaxis]
+        return np.clip(result, 0, 255).astype(np.uint8)
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  Guided Filter Helper
+    # ═════════════════════════════════════════════════════════════════════════
+
+    def _guided_filter(self, I: np.ndarray, p: np.ndarray, r: int, eps: float) -> np.ndarray:
+        """
+        Guided Filter implementation.
+        I: guidance image (grayscale original room image), normalized to [0.0, 1.0]
+        p: filtering input image (binary mask), normalized to [0.0, 1.0]
+        r: local window radius
+        eps: regularization parameter
+        """
+        mean_I = cv2.boxFilter(I, cv2.CV_32F, (r, r))
+        mean_p = cv2.boxFilter(p, cv2.CV_32F, (r, r))
+        mean_Ip = cv2.boxFilter(I * p, cv2.CV_32F, (r, r))
+        cov_Ip = mean_Ip - mean_I * mean_p
+
+        mean_II = cv2.boxFilter(I * I, cv2.CV_32F, (r, r))
+        var_I = mean_II - mean_I * mean_I
+
+        a = cov_Ip / (var_I + eps)
+        b = mean_p - a * mean_I
+
+        mean_a = cv2.boxFilter(a, cv2.CV_32F, (r, r))
+        mean_b = cv2.boxFilter(b, cv2.CV_32F, (r, r))
+
+        q = mean_a * I + mean_b
+        return q
+
+    # ═════════════════════════════════════════════════════════════════════════
     #  Final Composite (ROI Local)
     # ═════════════════════════════════════════════════════════════════════════
 
@@ -423,18 +632,32 @@ class TextureProjectionEngine:
     ) -> np.ndarray:
         """
         Composite the textured fabric onto the room image using the mask.
-        Uses a feathered alpha blend at the boundary for smooth edges.
+        Uses a guided edge-preserving filter combined with configurable Gaussian feathering
+        to reduce cut-and-paste artifacts while keeping sharp boundaries where appropriate.
         """
         h_roi, w_roi = room_roi.shape[:2]
-
-        # Create a feathered alpha channel from the mask
         mask_float = mask_roi.astype(np.float32) / 255.0
 
-        # Gentle Gaussian feather at the boundary (3px radius)
-        alpha = cv2.GaussianBlur(mask_float, (7, 7), 1.5)
-        alpha_3ch = alpha[:, :, np.newaxis]
+        if self.enable_guided_feather:
+            # Grayscale guidance image normalized to [0.0, 1.0]
+            gray = cv2.cvtColor(room_roi, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
+            
+            # Local window radius = 8, regularization = 0.02
+            alpha = self._guided_filter(gray, mask_float, r=8, eps=0.02)
+            alpha = np.clip(alpha, 0.0, 1.0)
+            
+            # Apply configurable Gaussian blur to the guided mask
+            if self.feather_ksize > 0:
+                ksize = self.feather_ksize | 1 # Ensure odd
+                alpha = cv2.GaussianBlur(alpha, (ksize, ksize), self.feather_sigma)
+        else:
+            if self.feather_ksize > 0:
+                ksize = self.feather_ksize | 1
+                alpha = cv2.GaussianBlur(mask_float, (ksize, ksize), self.feather_sigma)
+            else:
+                alpha = mask_float
 
-        # Alpha blend
+        alpha_3ch = alpha[:, :, np.newaxis]
         result = (
             fabric_roi.astype(np.float32) * alpha_3ch
             + room_roi.astype(np.float32) * (1.0 - alpha_3ch)

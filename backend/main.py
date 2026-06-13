@@ -1,15 +1,23 @@
 """
-Vastra FastAPI Backend – main.py
+Vastra FastAPI Backend - main.py
 =================================
 
 Interactive SAM3 Decoupled Architecture.
 
 Endpoints:
-  GET  /health          – liveness check
-  POST /api/upload      – upload image → run SAM2 encoder → cache embedding → return session_id
-  POST /api/interact    – send points → run SAM2 decoder → return preview overlay PNG
-  POST /api/render      – confirm mask + fabric texture → run texture engine → return final PNG
+  GET  /health          - liveness check
+  POST /api/upload      - upload image -> run SAM2 encoder -> cache embedding -> return session_id
+  POST /api/interact    - send points -> run SAM2 decoder -> return preview overlay PNG
+  POST /api/render      - confirm mask + fabric texture -> run texture engine -> return final PNG
 """
+
+import sys
+
+# Reconfigure stdout/stderr to use UTF-8 to prevent charmap/CP1252 encoding errors on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 import time
 import uuid
@@ -32,6 +40,7 @@ from pydantic import BaseModel, Field
 from ai.segmentation import InteractiveSAMEngine
 from ai.pipeline import TextureProjectionEngine
 from ai.fabric_registry import resolve_texture
+from ai.inpaint import InpaintService
 from ai.utils import ensure_dirs, compress_image, pil_to_bytes, contour_dominance_filter, anti_fringe_dilate
 
 
@@ -183,6 +192,12 @@ class RenderRequest(BaseModel):
     fabric_texture_id: str = Field(..., description="Filename (without extension) of the fabric texture in assets/fabrics/")
     fabric_image_base64: Optional[str] = Field(None, description="Base64-encoded custom fabric image bytes")
     product_category: Optional[str] = Field(None, description="Category of the product being rendered")
+    refine_with_diffusion: bool = Field(False, description="Whether to refine the classically rendered result using a diffusion inpainting model (strength 0.15-0.25)")
+
+
+class UpdateMaskRequest(BaseModel):
+    session_id: str
+    mask_base64: str
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -242,7 +257,7 @@ def health():
 @app.post("/api/upload")
 async def api_upload(room_image: UploadFile = File(...)):
     """
-    Upload a room image → Run SAM2 Image Encoder → Cache embedding → Return session_id.
+    Upload a room image -> Run SAM2 Image Encoder -> Cache embedding -> Return session_id.
 
     Accepts:
       - room_image: JPEG/PNG of the room (multipart file upload)
@@ -262,7 +277,7 @@ async def api_upload(room_image: UploadFile = File(...)):
         room_np = np.array(room_pil)
         h, w = room_np.shape[:2]
 
-        print(f"[Vastra] /api/upload – image={w}x{h}")
+        print(f"[Vastra] /api/upload - image={w}x{h}")
 
         # Save to uploads/ for debugging
         session_id = uuid.uuid4().hex[:12]
@@ -333,14 +348,14 @@ async def api_interact(request: InteractRequest):
         h, w = session.original_size
 
         print(
-            f"[Vastra] /api/interact – session={request.session_id}, "
+            f"[Vastra] /api/interact - session={request.session_id}, "
             f"category={request.product_category}, points={len(request.points)}"
         )
 
         # Convert pydantic models to dicts for the engine
         points = [{"x": p.x, "y": p.y, "label": p.label} for p in request.points]
 
-        # Run SAM2 Decoder (fast — reuses cached embedding)
+        # Run SAM2 Decoder (fast - reuses cached embedding)
         engine = get_sam_engine()
         raw_mask, low_res_logits = engine.predict_decoder(
             image_embedding=session.image_embedding,
@@ -349,13 +364,25 @@ async def api_interact(request: InteractRequest):
             low_res_logits=session.last_logits,
         )
 
-        # Store the low-res logits and raw mask for stateful iterative refinement
+        # Store the low-res logits for stateful iterative refinement
         session.last_logits = low_res_logits
-        session.last_mask = raw_mask
 
-        # Generate preview overlay using raw mask directly (bypassing smoothing for interact)
+        # Post-processing: contour dominance filter + morphological opening + anti-fringe dilation
+        clean_mask = contour_dominance_filter(raw_mask, points=points)
+        
+        # Apply morphological opening to clean mask edges
+        kernel = np.ones((3, 3), np.uint8)
+        clean_mask = cv2.morphologyEx(clean_mask, cv2.MORPH_OPEN, kernel)
+        
+        # Reduce anti-fringe dilation from 2px to 1px
+        clean_mask = anti_fringe_dilate(clean_mask, dilate_px=1, blur_sigma=1.0)
+
+        # Cache the latest mask on the session for potential /api/render or manual brush edits
+        session.last_mask = clean_mask
+
+        # Generate preview overlay using clean mask
         overlay_np = InteractiveSAMEngine.generate_preview_overlay(
-            session.image_np, raw_mask
+            session.image_np, clean_mask
         )
 
         # Encode to PNG
@@ -369,6 +396,54 @@ async def api_interact(request: InteractRequest):
     except Exception as e:
         import traceback
         print(f"[Vastra] Interact error:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/session/{session_id}/mask")
+async def api_session_mask(session_id: str):
+    """Retrieve the current binary mask of the session as a PNG image."""
+    session = _get_session(session_id)
+    if session.last_mask is None:
+        raise HTTPException(status_code=400, detail="No mask has been generated yet.")
+    
+    mask_pil = Image.fromarray(session.last_mask, "L")
+    buf = BytesIO()
+    mask_pil.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.post("/api/session/mask")
+async def api_update_mask(request: UpdateMaskRequest):
+    """Update the session mask manually (manual brush edits) and return new preview overlay."""
+    session = _get_session(request.session_id)
+    try:
+        mask_bytes = base64.b64decode(request.mask_base64)
+        mask_pil = Image.open(BytesIO(mask_bytes)).convert("L")
+        h, w = session.original_size
+        
+        mask_np = np.array(mask_pil.resize((w, h), Image.Resampling.NEAREST))
+        _, mask_np = cv2.threshold(mask_np, 127, 255, cv2.THRESH_BINARY)
+        
+        # Apply morphological opening to keep manual drawing edges clean
+        kernel = np.ones((3, 3), np.uint8)
+        mask_np = cv2.morphologyEx(mask_np, cv2.MORPH_OPEN, kernel)
+        
+        # Apply anti-fringe dilation
+        mask_np = anti_fringe_dilate(mask_np, dilate_px=1, blur_sigma=1.0)
+        
+        session.last_mask = mask_np
+        
+        # Generate new preview overlay
+        overlay_np = InteractiveSAMEngine.generate_preview_overlay(
+            session.image_np, mask_np
+        )
+        overlay_pil = Image.fromarray(overlay_np, "RGB")
+        result_bytes = pil_to_bytes(overlay_pil, fmt="PNG")
+        
+        return Response(content=result_bytes, media_type="image/png")
+    except Exception as e:
+        import traceback
+        print(f"[Vastra] Update mask error:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -388,7 +463,7 @@ async def api_render(request: RenderRequest):
         h, w = session.original_size
 
         print(
-            f"[Vastra] /api/render – session={request.session_id}, "
+            f"[Vastra] /api/render - session={request.session_id}, "
             f"texture={request.fabric_texture_id}"
         )
 
@@ -444,12 +519,50 @@ async def api_render(request: RenderRequest):
 
         # Category from request or default
         category = request.product_category or "bedsheets"
+        
+        # Classical projection engine
         result_np = engine.render(
             room_np=session.image_np,
             mask_np=mask_np,
             fabric_np=fabric_np,
             product_category=category,
         )
+
+        # Hybrid diffusion refinement
+        if request.refine_with_diffusion:
+            print("[Vastra] /api/render - Executing hybrid diffusion refinement...")
+            try:
+                temp_dir = Path("uploads")
+                temp_classical_path = temp_dir / f"{request.session_id}_classical_temp.png"
+                temp_mask_path = temp_dir / f"{request.session_id}_mask_temp.png"
+                temp_output_path = temp_dir / f"{request.session_id}_refined_temp.png"
+                
+                # Save classical render and mask to temporary files
+                Image.fromarray(result_np, "RGB").save(str(temp_classical_path), "PNG")
+                Image.fromarray(mask_np, "L").save(str(temp_mask_path), "PNG")
+                
+                # Load and run inpainting service at low strength
+                inpainter = InpaintService()
+                prompt = f"photorealistic {category.replace('_', ' ')}, matching fabric pattern, high quality folds and wrinkles, interior design"
+                
+                inpainter.run_inpaint(
+                    image_path=str(temp_classical_path),
+                    mask_path=str(temp_mask_path),
+                    prompt=prompt,
+                    output_path=str(temp_output_path),
+                    strength=0.20
+                )
+                
+                # Load refined result
+                refined_pil = Image.open(str(temp_output_path)).convert("RGB")
+                result_np = np.array(refined_pil)
+                
+                # Cleanup temp files
+                for p in [temp_classical_path, temp_mask_path, temp_output_path]:
+                    if p.exists():
+                        p.unlink()
+            except Exception as e:
+                print(f"[Vastra] Diffusion refinement failed: {e}. Falling back to classical result.")
 
         # Encode to PNG
         result_pil = Image.fromarray(result_np, "RGB")

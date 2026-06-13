@@ -449,15 +449,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       (Icons.compare_rounded, 'Before/After'),
     ];
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
       children: features
           .asMap()
           .entries
-          .map((e) => Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: _buildPill(e.value.$1, e.value.$2),
-              ).animate(delay: Duration(milliseconds: 1600 + e.key * 100)).fadeIn(duration: 400.ms))
+          .map((e) => _buildPill(e.value.$1, e.value.$2)
+              .animate(delay: Duration(milliseconds: 1600 + e.key * 100))
+              .fadeIn(duration: 400.ms))
           .toList(),
     );
   }

@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-InteractiveSAMEngine – Decoupled SAM2 Segmentation Engine
+InteractiveSAMEngine - Decoupled SAM2 Segmentation Engine
 ==========================================================
 
 Paradigm shift: NO automatic bounding boxes, NO text queries, NO grid anchors.
 
 Architecture:
-  1. predict_encoder(image) → Run SAM2 Image Encoder ONCE per upload.
+  1. predict_encoder(image) -> Run SAM2 Image Encoder ONCE per upload.
      Returns a feature embedding dict that is cached server-side.
 
-  2. predict_decoder(embedding, points) → Run the lightweight SAM2 Mask Decoder
+  2. predict_decoder(embedding, points) -> Run the lightweight SAM2 Mask Decoder
      with user-provided interactive point prompts (positive taps + negative
      refinement taps). Returns a high-fidelity binary mask.
 
-The frontend sends normalized [0.0–1.0] coordinates. This engine maps them
+The frontend sends normalized [0.0-1.0] coordinates. This engine maps them
 to native pixel dimensions before feeding to the SAM2 decoder.
 """
 
@@ -33,7 +33,7 @@ class InteractiveSAMEngine:
     Usage:
         engine = InteractiveSAMEngine(device="cuda")
 
-        # Step 1 – Run once per image upload
+        # Step 1 - Run once per image upload
         embedding = engine.predict_encoder(image_np)
 
         # Step 2 – Run per user interaction (fast)
@@ -145,10 +145,15 @@ class InteractiveSAMEngine:
                 from hydra.core.global_hydra import GlobalHydra
                 from sam2.build_sam import build_sam2
                 from sam2.sam2_image_predictor import SAM2ImagePredictor
-
-                GlobalHydra.instance().clear()
-                sam2_config_dir = os.path.join(os.path.dirname(sam2.__file__), "configs")
-                hydra.initialize_config_dir(config_dir=sam2_config_dir, version_base="1.2")
+                try:
+                    GlobalHydra.instance().clear()
+                except Exception as e:
+                    print(f"[InteractiveSAMEngine] GlobalHydra clear failed (non-fatal): {e}")
+                try:
+                    sam2_config_dir = os.path.join(os.path.dirname(sam2.__file__), "configs")
+                    hydra.initialize_config_dir(config_dir=sam2_config_dir, version_base="1.2")
+                except Exception as e:
+                    print(f"[InteractiveSAMEngine] hydra initialize_config_dir failed (non-fatal): {e}")
 
                 # Build the SAM2 model using mapped config and checkpoint
                 sam2_model = build_sam2(model_cfg, checkpoint_path, device=self.device)
@@ -163,10 +168,15 @@ class InteractiveSAMEngine:
                     from hydra.core.global_hydra import GlobalHydra
                     from segment_anything_2.build_sam import build_sam2
                     from segment_anything_2.sam2_image_predictor import SAM2ImagePredictor
-
-                    GlobalHydra.instance().clear()
-                    sam2_config_dir = os.path.join(os.path.dirname(segment_anything_2.__file__), "configs")
-                    hydra.initialize_config_dir(config_dir=sam2_config_dir, version_base="1.2")
+                    try:
+                        GlobalHydra.instance().clear()
+                    except Exception as e:
+                        print(f"[InteractiveSAMEngine] GlobalHydra clear failed (non-fatal): {e}")
+                    try:
+                        sam2_config_dir = os.path.join(os.path.dirname(segment_anything_2.__file__), "configs")
+                        hydra.initialize_config_dir(config_dir=sam2_config_dir, version_base="1.2")
+                    except Exception as e:
+                        print(f"[InteractiveSAMEngine] hydra initialize_config_dir failed (non-fatal): {e}")
 
                     sam2_model = build_sam2(model_cfg, checkpoint_path, device=self.device)
                     self._predictor = SAM2ImagePredictor(sam2_model)
@@ -221,7 +231,7 @@ class InteractiveSAMEngine:
         print(f"[InteractiveSAMEngine] Encoder complete.")
         return embedding_data
 
-    # ── Decoder Pass (Run per interaction — FAST) ─────────────────────────────
+    # ── Decoder Pass (Run per interaction - FAST) ─────────────────────────────
 
     def predict_decoder(
         self,
@@ -233,8 +243,8 @@ class InteractiveSAMEngine:
         """
         Run the SAM2 Mask Decoder with interactive point prompts.
 
-        This is the lightweight pass — it reuses the cached image embedding
-        and only runs the small decoder head. Typical latency: 10–50ms.
+        This is the lightweight pass - it reuses the cached image embedding
+        and only runs the small decoder head. Typical latency: 10-50ms.
 
         Args:
             image_embedding: The dict returned by predict_encoder().
@@ -307,15 +317,22 @@ class InteractiveSAMEngine:
                 best_score = float(scores[0])
                 best_idx = 0
             else:
+                multimask = len(points) <= 1
                 masks, scores, logits = predictor.predict(
                     point_coords=point_coords_np,
                     point_labels=point_labels_np,
-                    multimask_output=True,
+                    multimask_output=multimask,
                 )
-                best_idx = int(np.argmax(scores))
-                best_mask = masks[best_idx]
-                best_logits = logits[best_idx]
-                best_score = float(scores[best_idx])
+                if multimask:
+                    best_idx = int(np.argmax(scores))
+                    best_mask = masks[best_idx]
+                    best_logits = logits[best_idx]
+                    best_score = float(scores[best_idx])
+                else:
+                    best_idx = 0
+                    best_mask = masks[0]
+                    best_logits = logits[0]
+                    best_score = float(scores[0])
 
             print(f"[InteractiveSAMEngine] Decoder complete. "
                   f"Best mask idx={best_idx}, score={best_score:.4f}, "

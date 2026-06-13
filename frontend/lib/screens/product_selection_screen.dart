@@ -89,7 +89,7 @@ class _ProductSelectionScreenState extends State<ProductSelectionScreen> {
                         crossAxisCount: 2,
                         crossAxisSpacing: 14,
                         mainAxisSpacing: 14,
-                        childAspectRatio: 0.88,
+                        childAspectRatio: 0.80,
                       ),
                       itemCount: ProductCategoryData.all.length,
                       itemBuilder: (context, index) {
@@ -254,7 +254,7 @@ class _CategoryCardState extends State<_CategoryCard>
                   gradientColors: _cardGradient,
                 ),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

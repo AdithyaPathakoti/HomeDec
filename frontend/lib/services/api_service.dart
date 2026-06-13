@@ -92,6 +92,7 @@ class ApiService {
     required String fabricTextureId,
     required String productCategory,
     String? fabricImageBase64,
+    bool refineWithDiffusion = false,
   }) async {
     final uri = Uri.parse(
         '${VastraConstants.baseUrl}${VastraConstants.renderEndpoint}');
@@ -100,6 +101,7 @@ class ApiService {
       'session_id': sessionId,
       'fabric_texture_id': fabricTextureId,
       'product_category': productCategory,
+      'refine_with_diffusion': refineWithDiffusion,
     };
     if (fabricImageBase64 != null) {
       payload['fabric_image_base64'] = fabricImageBase64;
@@ -115,6 +117,38 @@ class ApiService {
       return response.bodyBytes;
     } else {
       throw Exception('Render failed: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  /// 4. Fetches the binary mask PNG of the current session.
+  Future<Uint8List> fetchMask(String sessionId) async {
+    final uri = Uri.parse('${VastraConstants.baseUrl}/api/session/$sessionId/mask');
+    final response = await http.get(uri).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) {
+      return response.bodyBytes;
+    } else {
+      throw Exception('Failed to fetch mask: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  /// 5. Uploads a manual brush-corrected binary mask (base64) to update session mask.
+  Future<Uint8List> updateSessionMask({
+    required String sessionId,
+    required String base64Mask,
+  }) async {
+    final uri = Uri.parse('${VastraConstants.baseUrl}/api/session/mask');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'session_id': sessionId,
+        'mask_base64': base64Mask,
+      }),
+    ).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) {
+      return response.bodyBytes;
+    } else {
+      throw Exception('Failed to update mask: ${response.statusCode} - ${response.body}');
     }
   }
 }
