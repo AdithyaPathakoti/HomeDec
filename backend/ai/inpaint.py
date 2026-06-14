@@ -26,21 +26,9 @@ class InpaintService:
                 print("Cloud API connected successfully.")
             except Exception as e:
                 print(f"Failed to connect to primary space {self.model_id}: {e}")
-                # Fallback to another popular running space if primary is down
-                fallback_space = "ameerazam08/FLUX.1-dev-Inpainting-Model-Beta-GPU"
-                print(f"Attempting to connect to fallback space {fallback_space}...")
-                try:
-                    if hf_token:
-                        self.client = Client(fallback_space, hf_token=hf_token)
-                    else:
-                        self.client = Client(fallback_space)
-                    self.model_id = fallback_space
-                    print("Fallback cloud API connected successfully.")
-                except Exception as ex:
-                    print(f"All cloud API connection attempts failed: {ex}")
-                    raise ex
+                raise e
 
-    def run_inpaint(self, image_path: str, mask_path: str, prompt: str, output_path: str, strength: float = 0.20) -> str:
+    def run_inpaint(self, image_path: str, mask_path: str, prompt: str, output_path: str, strength: float = 0.02) -> str:
         # Ensure client is loaded
         self.load_model()
         

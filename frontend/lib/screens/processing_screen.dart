@@ -15,9 +15,13 @@ class ProcessingScreen extends StatefulWidget {
 
 class _ProcessingScreenState extends State<ProcessingScreen> {
   final List<Offset> _currentStrokePoints = [];
+  final TransformationController _transformationController = TransformationController();
+  bool _isZoomed = false;
+
   @override
   void initState() {
     super.initState();
+    _transformationController.addListener(_onZoomChanged);
     // Initialize the room image upload session on load
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<VastraProvider>();
@@ -34,6 +38,21 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _transformationController.removeListener(_onZoomChanged);
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  void _onZoomChanged() {
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    final isZoomed = scale > 1.05;
+    if (isZoomed != _isZoomed) {
+      setState(() => _isZoomed = isZoomed);
+    }
   }
 
   void _onCanvasTap(TapUpDetails details, BoxConstraints constraints) {
@@ -254,97 +273,140 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
             aspectRatio: provider.roomImageAspectRatio,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapUp: provider.isBrushMode ? null : (details) => _onCanvasTap(details, constraints),
-                  onPanStart: provider.isBrushMode ? (details) {
-                    setState(() {
-                      _currentStrokePoints.clear();
-                      _currentStrokePoints.add(details.localPosition);
-                    });
-                  } : null,
-                  onPanUpdate: provider.isBrushMode ? (details) {
-                    setState(() {
-                      _currentStrokePoints.add(details.localPosition);
-                    });
-                  } : null,
-                  onPanEnd: provider.isBrushMode ? (details) async {
-                    if (_currentStrokePoints.isEmpty) return;
-                    final pts = List<Offset>.from(_currentStrokePoints);
-                    setState(() {
-                      _currentStrokePoints.clear();
-                    });
-                    await provider.applyPaintStrokes(
-                      pts,
-                      provider.isBrushAdd,
-                      provider.brushSize,
-                      constraints.maxWidth,
-                      constraints.maxHeight,
-                    );
-                    await provider.uploadLocalMask();
-                  } : null,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Base Layer: Room image
-                      Image.memory(
-                        provider.roomImageBytes!,
-                        fit: BoxFit.fill,
-                      ),
-
-                      // Overlay Layer: Mask preview
-                      if (provider.maskPreviewOverlay != null)
-                        Image.memory(
-                          provider.maskPreviewOverlay!,
-                          fit: BoxFit.fill,
-                        ),
-
-                      // Real-time brush stroke overlay
-                      if (_currentStrokePoints.isNotEmpty)
-                        Positioned.fill(
-                          child: CustomPaint(
-                            painter: BrushStrokePainter(
-                              points: _currentStrokePoints,
-                              isAdd: provider.isBrushAdd,
-                              brushSize: provider.brushSize,
-                            ),
+                return InteractiveViewer(
+                  transformationController: _transformationController,
+                  minScale: 1.0,
+                  maxScale: 5.0,
+                  panEnabled: true,
+                  scaleEnabled: true,
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    height: constraints.maxHeight,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: provider.isBrushMode ? null : (details) => _onCanvasTap(details, constraints),
+                      onPanStart: provider.isBrushMode ? (details) {
+                        setState(() {
+                          _currentStrokePoints.clear();
+                          _currentStrokePoints.add(details.localPosition);
+                        });
+                      } : null,
+                      onPanUpdate: provider.isBrushMode ? (details) {
+                        setState(() {
+                          _currentStrokePoints.add(details.localPosition);
+                        });
+                      } : null,
+                      onPanEnd: provider.isBrushMode ? (details) async {
+                        if (_currentStrokePoints.isEmpty) return;
+                        final pts = List<Offset>.from(_currentStrokePoints);
+                        setState(() {
+                          _currentStrokePoints.clear();
+                        });
+                        await provider.applyPaintStrokes(
+                          pts,
+                          provider.isBrushAdd,
+                          provider.brushSize,
+                          constraints.maxWidth,
+                          constraints.maxHeight,
+                        );
+                        await provider.uploadLocalMask();
+                      } : null,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // Base Layer: Room image
+                          Image.memory(
+                            provider.roomImageBytes!,
+                            fit: BoxFit.fill,
                           ),
-                        ),
 
-                      // Interaction Coordinates / Dots
-                      if (!provider.isBrushMode)
-                        ...provider.interactivePoints.map((pt) {
-                          final double posX = pt['x'] * constraints.maxWidth;
-                          final double posY = pt['y'] * constraints.maxHeight;
-                          final bool isPositive = pt['label'] == 1;
+                          // Overlay Layer: Mask preview
+                          if (provider.maskPreviewOverlay != null)
+                            Image.memory(
+                              provider.maskPreviewOverlay!,
+                              fit: BoxFit.fill,
+                            ),
 
-                          return Positioned(
-                            left: posX - 10,
-                            top: posY - 10,
-                            child: Container(
-                              width: 20,
-                              height: 20,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isPositive ? Colors.green.withOpacity(0.85) : Colors.red.withOpacity(0.85),
-                                border: Border.all(color: Colors.white, width: 2.0),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.4),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  )
-                                ],
-                              ),
-                              child: Icon(
-                                isPositive ? Icons.add : Icons.remove,
-                                size: 10,
-                                color: Colors.white,
+                          // Real-time brush stroke overlay
+                          if (_currentStrokePoints.isNotEmpty)
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: BrushStrokePainter(
+                                  points: _currentStrokePoints,
+                                  isAdd: provider.isBrushAdd,
+                                  brushSize: provider.brushSize,
+                                ),
                               ),
                             ),
-                          );
-                        }),
-                    ],
+
+                          // Interaction Coordinates / Dots
+                          if (!provider.isBrushMode)
+                            ...provider.interactivePoints.map((pt) {
+                              final double posX = pt['x'] * constraints.maxWidth;
+                              final double posY = pt['y'] * constraints.maxHeight;
+                              final bool isPositive = pt['label'] == 1;
+
+                              return Positioned(
+                                left: posX - 10,
+                                top: posY - 10,
+                                child: Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: isPositive ? Colors.green.withOpacity(0.85) : Colors.red.withOpacity(0.85),
+                                    border: Border.all(color: Colors.white, width: 2.0),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.4),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      )
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    isPositive ? Icons.add : Icons.remove,
+                                    size: 10,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              );
+                            }),
+
+                          // Floating Reset Zoom indicator
+                          if (_isZoomed)
+                            Positioned(
+                              right: 12,
+                              top: 12,
+                              child: GestureDetector(
+                                onTap: () {
+                                  _transformationController.value = Matrix4.identity();
+                                  setState(() => _isZoomed = false);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.65),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: VastraColors.gold.withOpacity(0.5)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(Icons.zoom_out_map_rounded, size: 12, color: VastraColors.gold),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Reset Zoom',
+                                        style: TextStyle(color: VastraColors.gold, fontSize: 10, fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 );
               },
@@ -561,7 +623,13 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                       IconButton(
                         icon: const Icon(Icons.refresh_rounded, color: VastraColors.gold),
                         tooltip: 'Reset Taps',
-                        onPressed: hasPoints && !provider.isProcessing ? () => provider.resetTaps() : null,
+                        onPressed: hasPoints && !provider.isProcessing
+                            ? () {
+                                provider.resetTaps();
+                                _transformationController.value = Matrix4.identity();
+                                setState(() => _isZoomed = false);
+                              }
+                            : null,
                       ),
                     ],
                   ),

@@ -367,15 +367,11 @@ async def api_interact(request: InteractRequest):
         # Store the low-res logits for stateful iterative refinement
         session.last_logits = low_res_logits
 
-        # Post-processing: contour dominance filter + morphological opening + anti-fringe dilation
+        # Post-processing: contour dominance filter + anti-fringe dilation
         clean_mask = contour_dominance_filter(raw_mask, points=points)
         
-        # Apply morphological opening to clean mask edges
-        kernel = np.ones((3, 3), np.uint8)
-        clean_mask = cv2.morphologyEx(clean_mask, cv2.MORPH_OPEN, kernel)
-        
-        # Reduce anti-fringe dilation from 2px to 1px
-        clean_mask = anti_fringe_dilate(clean_mask, dilate_px=1, blur_sigma=1.0)
+        # Anti-fringe dilation: 2px to cover original fabric rim peeking through mask boundary
+        clean_mask = anti_fringe_dilate(clean_mask, dilate_px=2, blur_sigma=1.2)
 
         # Cache the latest mask on the session for potential /api/render or manual brush edits
         session.last_mask = clean_mask
@@ -488,14 +484,15 @@ async def api_render(request: RenderRequest):
 
         # Apply post-processing (smoothing and edge cleanup) strictly inside /api/render
         mask_np = contour_dominance_filter(mask_np)
-        mask_np = anti_fringe_dilate(mask_np, dilate_px=2, blur_sigma=1.0)
+        # 3px dilation to fully cover original fabric fringe at boundary
+        mask_np = anti_fringe_dilate(mask_np, dilate_px=3, blur_sigma=1.5)
 
         # ── Load fabric texture ──────────────────────────────────────────────
         if request.fabric_image_base64:
             try:
                 fabric_bytes = base64.b64decode(request.fabric_image_base64)
                 fabric_pil = Image.open(BytesIO(fabric_bytes)).convert("RGB")
-                fabric_pil = compress_image(fabric_pil, max_dimension=512)
+                fabric_pil = compress_image(fabric_pil, max_dimension=1024)
                 fabric_np = np.array(fabric_pil)
             except Exception as e:
                 raise HTTPException(
@@ -509,7 +506,7 @@ async def api_render(request: RenderRequest):
                     detail=f"Fabric texture '{request.fabric_texture_id}' not found in assets/fabrics/.",
                 )
             fabric_pil = Image.open(fabric_path).convert("RGB")
-            fabric_pil = compress_image(fabric_pil, max_dimension=512)
+            fabric_pil = compress_image(fabric_pil, max_dimension=1024)
             fabric_np = np.array(fabric_pil)
 
         print(f"[Vastra] Loaded fabric texture: shape={fabric_np.shape}")
@@ -520,12 +517,13 @@ async def api_render(request: RenderRequest):
         # Category from request or default
         category = request.product_category or "bedsheets"
         
-        # Classical projection engine
+        # Classical projection engine (pass session_id for deterministic tile offsets)
         result_np = engine.render(
             room_np=session.image_np,
             mask_np=mask_np,
             fabric_np=fabric_np,
             product_category=category,
+            session_id=request.session_id,
         )
 
         # Hybrid diffusion refinement
@@ -550,7 +548,7 @@ async def api_render(request: RenderRequest):
                     mask_path=str(temp_mask_path),
                     prompt=prompt,
                     output_path=str(temp_output_path),
-                    strength=0.20
+                    strength=0.02
                 )
                 
                 # Load refined result

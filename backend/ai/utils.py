@@ -88,6 +88,9 @@ def contour_dominance_filter(mask_np: np.ndarray, points: list = None) -> np.nda
     at least one positive tap point (label == 1), and does NOT contain any negative tap point.
     If no points are provided, we fallback to retaining the largest contour.
 
+    Additionally applies morphological closing to fill small internal holes that
+    SAM2 sometimes leaves at texture-boundary regions.
+
     Args:
         mask_np: Binary mask (H, W), dtype uint8, 255 = foreground.
         points: Optional list of dicts with keys 'x', 'y', 'label' (normalized coords).
@@ -155,7 +158,7 @@ def contour_dominance_filter(mask_np: np.ndarray, points: list = None) -> np.nda
                     has_neg = True
                     break
 
-        if has_pos:
+        if has_pos and not has_neg:
             retained_contours.append(contour)
 
     # Fallback to the largest contour if no contours matched
@@ -179,6 +182,14 @@ def contour_dominance_filter(mask_np: np.ndarray, points: list = None) -> np.nda
     if retained_contours and eroded_used:
         clean_mask = cv2.dilate(clean_mask, kernel, iterations=2)
         clean_mask = cv2.bitwise_and(clean_mask, binary)
+
+    # Morphological closing to fill small internal holes
+    # (SAM2 often leaves tiny holes at texture boundaries inside the mask)
+    if clean_mask.max() > 0:
+        close_r = max(5, int(max(w, h) * 0.008))
+        close_r = close_r if close_r % 2 == 1 else close_r + 1
+        close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (close_r, close_r))
+        clean_mask = cv2.morphologyEx(clean_mask, cv2.MORPH_CLOSE, close_kernel)
 
     # Explicitly punch out a circle around all negative tap points, scaled by image resolution
     if neg_pixel_points:
@@ -246,15 +257,5 @@ def anti_fringe_dilate(
     _, result = cv2.threshold(
         feathered.astype(np.uint8), 127, 255, cv2.THRESH_BINARY
     )
-
-    # Report expansion
-    original_area = np.count_nonzero(binary)
-    expanded_area = np.count_nonzero(result)
-    expansion_px = expanded_area - original_area
-    if expansion_px > 0:
-        print(
-            f"[anti_fringe_dilate] Expanded mask by {expansion_px} pixels "
-            f"({original_area} -> {expanded_area})."
-        )
 
     return result
