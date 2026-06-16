@@ -120,7 +120,27 @@ class _ResultScreenState extends State<ResultScreen>
       isScrollControlled: true,
       barrierColor: Colors.black.withOpacity(0.6),
       builder: (context) => const _FabricAdjustmentPanel(),
-    );
+    ).then((_) {
+      if (!mounted) return;
+      // Bake the final AI image with diffusion refinement once user finishes adjustment and closes bottom sheet
+      final provider = context.read<VastraProvider>();
+      if (provider.refineWithDiffusion && provider.lastFabricTextureId != null) {
+        provider.renderFinal(
+          provider.lastFabricTextureId!,
+          customFabricBytes: provider.lastCustomFabricBytes,
+          bypassDiffusion: false,
+        ).catchError((err) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to bake final diffusion: $err'),
+                backgroundColor: Colors.red[900],
+              ),
+            );
+          }
+        });
+      }
+    });
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -532,6 +552,7 @@ class _FabricAdjustmentPanelState extends State<_FabricAdjustmentPanel> {
       provider.renderFinal(
         provider.lastFabricTextureId!,
         customFabricBytes: provider.lastCustomFabricBytes,
+        bypassDiffusion: true,
       ).catchError((err) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

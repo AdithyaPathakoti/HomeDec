@@ -415,7 +415,7 @@ class VastraProvider extends ChangeNotifier {
 
   /// Calls /api/render to project the fabric texture onto the segmented mask
   Future<void> renderFinal(String fabricTextureId,
-      {Uint8List? customFabricBytes}) async {
+      {Uint8List? customFabricBytes, bool? bypassDiffusion}) async {
     if (_currentSessionId == null)
       throw Exception('No active session. Please segment the room first.');
     _isProcessing = true;
@@ -439,7 +439,7 @@ class VastraProvider extends ChangeNotifier {
         fabricTextureId: fabricTextureId,
         productCategory: category,
         fabricImageBase64: base64Fabric,
-        refineWithDiffusion: _refineWithDiffusion,
+        refineWithDiffusion: bypassDiffusion == true ? false : _refineWithDiffusion,
         tileScale: _tileScale,
         rotation: _rotation,
         offsetX: _offsetX,

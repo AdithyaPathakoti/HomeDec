@@ -28,7 +28,7 @@ class InpaintService:
                 print(f"Failed to connect to primary space {self.model_id}: {e}")
                 raise e
 
-    def run_inpaint(self, image_path: str, mask_path: str, prompt: str, output_path: str, strength: float = 0.02) -> str:
+    def run_inpaint(self, image_path: str, mask_path: str, depth_path: str, prompt: str, output_path: str, strength: float = 0.02) -> str:
         # Ensure client is loaded
         self.load_model()
         
@@ -96,10 +96,44 @@ class InpaintService:
             # Resize the low-res/model-res generated image back to the HD original size
             generated_hd = generated_img.resize(orig_size, Image.Resampling.LANCZOS)
             
-            # Composite: combine the generated HD image (for masked area) with the untouched original HD image.
+            # Local depth gradient detail blending
+            import numpy as np
+            import cv2
+            
+            # Load depth map
+            depth_img = Image.open(depth_path).convert("L")
+            depth_np = np.array(depth_img, dtype=np.float32) / 255.0
+            
+            # Compute depth gradients
+            grad_x = cv2.Sobel(depth_np, cv2.CV_32F, 1, 0, ksize=5)
+            grad_y = cv2.Sobel(depth_np, cv2.CV_32F, 0, 1, ksize=5)
+            grad_mag = np.sqrt(grad_x**2 + grad_y**2)
+            
+            # Normalize gradient magnitude to [0.0, 1.0]
+            max_grad = grad_mag.max()
+            if max_grad > 1e-4:
+                grad_mag = grad_mag / max_grad
+            else:
+                grad_mag = np.zeros_like(grad_mag)
+                
+            # Smooth weight map to avoid hard transitions
+            grad_mag_smooth = cv2.GaussianBlur(grad_mag, (9, 9), 3.0)
+            
+            # Convert PIL images to numpy for pixel-wise blending
+            orig_np = np.array(orig_image, dtype=np.float32)
+            gen_np = np.array(generated_hd, dtype=np.float32)
+            
+            # Blend the classical render (orig_np) with the diffusion output (gen_np) using depth gradient weight
+            # High gradient (folds/valleys) -> use diffusion; low gradient (flat areas) -> use classical
+            weight_3d = grad_mag_smooth[:, :, np.newaxis]
+            blended_np = gen_np * weight_3d + orig_np * (1.0 - weight_3d)
+            blended_np = np.clip(blended_np, 0.0, 255.0).astype(np.uint8)
+            blended_img = Image.fromarray(blended_np, "RGB")
+            
+            # Composite: combine the blended image (for masked area) with the untouched original HD image.
             # This guarantees that the rest of the bedroom remains perfectly untouched and pixel-perfect.
-            # PIL composite: white in mask = use image1 (generated_hd), black in mask = use image2 (orig_image)
-            final_image = Image.composite(generated_hd, orig_image, orig_mask)
+            # PIL composite: white in mask = use image1 (blended_img), black in mask = use image2 (orig_image)
+            final_image = Image.composite(blended_img, orig_image, orig_mask)
             
             # Save as PNG directly to the destination path expected by FastAPI
             final_image.save(output_path, "PNG")

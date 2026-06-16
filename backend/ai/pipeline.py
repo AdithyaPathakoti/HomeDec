@@ -150,6 +150,7 @@ class TextureProjectionEngine:
         rotation: float = 0.0,
         offset_x: float = 0.0,
         offset_y: float = 0.0,
+        depth_map: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """
         Full photorealistic texture projection pipeline.
@@ -200,6 +201,7 @@ class TextureProjectionEngine:
 
         room_roi = room_np[y_min_m:y_max_m, x_min_m:x_max_m]
         mask_roi = mask_np[y_min_m:y_max_m, x_min_m:x_max_m]
+        depth_roi = depth_map[y_min_m:y_max_m, x_min_m:x_max_m] if depth_map is not None else None
         h_roi, w_roi = room_roi.shape[:2]
         mask_bool = mask_roi > 127
 
@@ -208,7 +210,8 @@ class TextureProjectionEngine:
             alpha = (mask_np > 127).astype(np.float32)[:, :, np.newaxis]
             tiled = self._tile_texture(
                 fabric_np, mask_np, full_bbox_w, p, session_id,
-                tile_scale=tile_scale, rotation=rotation, offset_x=offset_x, offset_y=offset_y
+                tile_scale=tile_scale, rotation=rotation, offset_x=offset_x, offset_y=offset_y,
+                depth_roi=depth_map
             )
             return np.clip(
                 tiled.astype(np.float32) * alpha + room_np.astype(np.float32) * (1 - alpha),
@@ -226,6 +229,7 @@ class TextureProjectionEngine:
             rotation=rotation,
             offset_x=offset_x,
             offset_y=offset_y,
+            depth_roi=depth_roi,
         )
 
         # ── STAGE 2: Perspective warp (flat categories only) ──────────────────
@@ -277,10 +281,9 @@ class TextureProjectionEngine:
         ao_map = np.where(mask_bool, ao_map, 0.0)
 
         # ── STAGE 6: Fold-following Warp ──────────────────────────────────────
-        warped_roi = self._luminance_warp(
-            perspective_roi, wrinkles_map, mask_roi,
-            warp_strength=p["displacement_scale"]
-        )
+        # Removed simple gradient-based displacement (Sobel-based fold warp Stage 6)
+        # and replaced with depth-aware UV warp in Stage 1.
+        warped_roi = perspective_roi
 
         # ── STAGE 7: LAB Relight ──────────────────────────────────────────────
         mean_light = float(np.mean(combined_map[mask_bool])) if np.any(mask_bool) else 128.0
@@ -368,20 +371,18 @@ class TextureProjectionEngine:
         rotation: float = 0.0,
         offset_x: float = 0.0,
         offset_y: float = 0.0,
+        depth_roi: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """
         Tile the fabric pattern across the ROI with customizable scale, rotation, and offset.
         Uses OpenCV remap with BORDER_WRAP for seamless, high-performance tiling.
+        Additionally performs depth-aware local scaling and geometry-aware UV warp.
         """
         h_roi, w_roi = mask_roi.shape[:2]
         fh, fw = fabric_np.shape[:2]
 
         # Base tile size (proportional to bounding box width)
-        base_tile_w = max(150, int(full_bbox_w * max(p["tile_fraction"], 0.60)))
-        
-        # Apply user scaling
-        tile_w = max(50, int(base_tile_w * tile_scale))
-        tile_h = max(50, int(tile_w * fh / fw))
+        base_tile_w = max(150.0, float(full_bbox_w * max(p["tile_fraction"], 0.60)))
 
         # Output coordinate grids
         grid_y, grid_x = np.meshgrid(np.arange(h_roi, dtype=np.float32), np.arange(w_roi, dtype=np.float32), indexing='ij')
@@ -391,6 +392,43 @@ class TextureProjectionEngine:
         y_ctr = h_roi / 2.0
         dx = grid_x - x_ctr
         dy = grid_y - y_ctr
+
+        if depth_roi is not None:
+            depth_roi_f = depth_roi.astype(np.float32)
+            # 1. Adaptive Scale: farther areas (lower depth) have smaller pattern sizes (denser tiling);
+            # closer areas (larger depth) have larger pattern sizes.
+            scale_local = tile_scale * (0.5 + 0.8 * depth_roi_f)
+
+            # 2. Depth-Aware UV Warp: compute gradients of the depth map to warp the mapping coordinates before rotation/scaling.
+            grad_depth_x = cv2.Sobel(depth_roi_f, cv2.CV_32F, 1, 0, ksize=5)
+            grad_depth_y = cv2.Sobel(depth_roi_f, cv2.CV_32F, 0, 1, ksize=5)
+
+            grad_mag = np.sqrt(grad_depth_x ** 2 + grad_depth_y ** 2)
+            max_mag = grad_mag.max()
+            if max_mag > 1e-4:
+                grad_dx_norm = grad_depth_x / max_mag
+                grad_dy_norm = grad_depth_y / max_mag
+            else:
+                grad_dx_norm = grad_depth_x
+                grad_dy_norm = grad_depth_y
+
+            warp_strength = float(p.get("displacement_scale", 4.0))
+            max_disp = 15.0
+            disp_x = np.clip(grad_dx_norm * warp_strength * 3.0, -max_disp, max_disp)
+            disp_y = np.clip(grad_dy_norm * warp_strength * 3.0, -max_disp, max_disp)
+
+            dx = dx + disp_x
+            dy = dy + disp_y
+        else:
+            scale_local = float(tile_scale)
+
+        # Compute local tile width and height per pixel!
+        tile_w_local = np.maximum(50.0, base_tile_w * scale_local)
+        tile_h_local = np.maximum(50.0, tile_w_local * (fh / fw))
+
+        # Scale mapping
+        scale_x = fw / tile_w_local
+        scale_y = fh / tile_h_local
 
         # Apply deterministic session offset if present
         sess_off_x = 0.0
@@ -408,10 +446,6 @@ class TextureProjectionEngine:
         theta = np.radians(rotation)
         cos_t = np.cos(theta)
         sin_t = np.sin(theta)
-
-        # Scale mapping
-        scale_x = fw / tile_w
-        scale_y = fh / tile_h
 
         map_xf = (dx * cos_t + dy * sin_t) * scale_x + (total_off_x * fw)
         map_yf = (-dx * sin_t + dy * cos_t) * scale_y + (total_off_y * fh)

@@ -41,6 +41,7 @@ from ai.segmentation import InteractiveSAMEngine
 from ai.pipeline import TextureProjectionEngine
 from ai.fabric_registry import resolve_texture
 from ai.inpaint import InpaintService
+from ai.depth import DepthEstimationService
 from ai.utils import ensure_dirs, compress_image, pil_to_bytes, contour_dominance_filter, anti_fringe_dilate
 
 
@@ -81,6 +82,15 @@ class SessionData(dict):
         self["created_at"] = time.time()
         self["last_mask"] = None
         self["last_logits"] = None
+        self["depth_map"] = None
+
+    @property
+    def depth_map(self) -> Optional[np.ndarray]:
+        return self.get("depth_map")
+
+    @depth_map.setter
+    def depth_map(self, value: Optional[np.ndarray]):
+        self["depth_map"] = value
 
     @property
     def session_id(self) -> str:
@@ -172,6 +182,17 @@ def get_texture_engine() -> TextureProjectionEngine:
     return _texture_engine
 
 
+_depth_service: Optional[DepthEstimationService] = None
+
+
+def get_depth_service() -> DepthEstimationService:
+    global _depth_service
+    if _depth_service is None:
+        print("[Vastra] Initializing DepthEstimationService...")
+        _depth_service = DepthEstimationService(device=DEVICE)
+    return _depth_service
+
+
 # ── Pydantic Models ──────────────────────────────────────────────────────────
 
 class PointPrompt(BaseModel):
@@ -228,6 +249,7 @@ def startup_event():
     print("[Vastra] Pre-loading AI models on startup...")
     get_sam_engine()
     get_texture_engine()
+    get_depth_service()
     print("[Vastra] All models initialized. Ready to serve.")
 
 
@@ -292,6 +314,10 @@ async def api_upload(room_image: UploadFile = File(...)):
         engine = get_sam_engine()
         embedding = engine.predict_encoder(room_np)
 
+        # Run the Depth Estimation (expensive — runs once)
+        depth_service = get_depth_service()
+        depth_map = depth_service.predict_depth(room_np)
+
         # Cache the session
         session = SessionData(
             session_id=session_id,
@@ -299,6 +325,7 @@ async def api_upload(room_image: UploadFile = File(...)):
             image_embedding=embedding,
             original_size=(h, w),
         )
+        session.depth_map = depth_map
         session.last_logits = None
         with _session_lock:
             _session_store[session_id] = session
@@ -532,6 +559,7 @@ async def api_render(request: RenderRequest):
             rotation=request.rotation,
             offset_x=request.offset_x,
             offset_y=request.offset_y,
+            depth_map=session.depth_map,
         )
 
         # Hybrid diffusion refinement
@@ -541,11 +569,20 @@ async def api_render(request: RenderRequest):
                 temp_dir = Path("uploads")
                 temp_classical_path = temp_dir / f"{request.session_id}_classical_temp.png"
                 temp_mask_path = temp_dir / f"{request.session_id}_mask_temp.png"
+                temp_depth_path = temp_dir / f"{request.session_id}_depth_temp.png"
                 temp_output_path = temp_dir / f"{request.session_id}_refined_temp.png"
                 
                 # Save classical render and mask to temporary files
                 Image.fromarray(result_np, "RGB").save(str(temp_classical_path), "PNG")
                 Image.fromarray(mask_np, "L").save(str(temp_mask_path), "PNG")
+                
+                # Save depth map (rescaled to 0-255 uint8) to temporary file
+                if session.depth_map is not None:
+                    depth_vis = (session.depth_map * 255).astype(np.uint8)
+                    Image.fromarray(depth_vis, "L").save(str(temp_depth_path), "PNG")
+                else:
+                    # Fallback empty black image if depth is missing
+                    Image.fromarray(np.zeros((h, w), dtype=np.uint8), "L").save(str(temp_depth_path), "PNG")
                 
                 # Load and run inpainting service at low strength
                 inpainter = InpaintService()
@@ -554,9 +591,10 @@ async def api_render(request: RenderRequest):
                 inpainter.run_inpaint(
                     image_path=str(temp_classical_path),
                     mask_path=str(temp_mask_path),
+                    depth_path=str(temp_depth_path),
                     prompt=prompt,
                     output_path=str(temp_output_path),
-                    strength=0.02
+                    strength=0.15
                 )
                 
                 # Load refined result
@@ -564,7 +602,7 @@ async def api_render(request: RenderRequest):
                 result_np = np.array(refined_pil)
                 
                 # Cleanup temp files
-                for p in [temp_classical_path, temp_mask_path, temp_output_path]:
+                for p in [temp_classical_path, temp_mask_path, temp_depth_path, temp_output_path]:
                     if p.exists():
                         p.unlink()
             except Exception as e:
