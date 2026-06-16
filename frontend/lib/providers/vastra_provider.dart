@@ -35,6 +35,13 @@ class VastraProvider extends ChangeNotifier {
   Uint8List? _localMaskBytes;
   bool _refineWithDiffusion = false;
 
+  double _tileScale = 1.0;
+  double _rotation = 0.0;
+  double _offsetX = 0.0;
+  double _offsetY = 0.0;
+  String? _lastFabricTextureId;
+  Uint8List? _lastCustomFabricBytes;
+
   // ── Getters ────────────────────────────────────────────────────────────────
   Uint8List? get roomImageBytes => _roomImageBytes;
   File? get roomImageFile => _roomImageFile;
@@ -60,6 +67,13 @@ class VastraProvider extends ChangeNotifier {
   double get brushSize => _brushSize;
   Uint8List? get localMaskBytes => _localMaskBytes;
   bool get refineWithDiffusion => _refineWithDiffusion;
+
+  double get tileScale => _tileScale;
+  double get rotation => _rotation;
+  double get offsetX => _offsetX;
+  double get offsetY => _offsetY;
+  String? get lastFabricTextureId => _lastFabricTextureId;
+  Uint8List? get lastCustomFabricBytes => _lastCustomFabricBytes;
 
   bool get isProcessing =>
       _isProcessing || _status == ProcessingStatus.processing;
@@ -139,6 +153,9 @@ class VastraProvider extends ChangeNotifier {
     _isBrushMode = false;
     _localMaskBytes = null;
     _refineWithDiffusion = false;
+    _lastFabricTextureId = null;
+    _lastCustomFabricBytes = null;
+    resetPlacement();
     notifyListeners();
   }
 
@@ -254,6 +271,33 @@ class VastraProvider extends ChangeNotifier {
   void toggleDiffusionRefinement() {
     _refineWithDiffusion = !_refineWithDiffusion;
     notifyListeners();
+  }
+
+  void setTileScale(double val) {
+    _tileScale = val;
+    notifyListeners();
+  }
+
+  void setRotation(double val) {
+    _rotation = val;
+    notifyListeners();
+  }
+
+  void setOffsetX(double val) {
+    _offsetX = val;
+    notifyListeners();
+  }
+
+  void setOffsetY(double val) {
+    _offsetY = val;
+    notifyListeners();
+  }
+
+  void resetPlacement() {
+    _tileScale = 1.0;
+    _rotation = 0.0;
+    _offsetX = 0.0;
+    _offsetY = 0.0;
   }
 
   Future<void> toggleBrushMode() async {
@@ -382,6 +426,9 @@ class VastraProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      _lastFabricTextureId = fabricTextureId;
+      _lastCustomFabricBytes = customFabricBytes;
+
       final category = _selectedProduct?.apiKey ?? 'bedsheets';
       String? base64Fabric;
       if (customFabricBytes != null) {
@@ -393,6 +440,10 @@ class VastraProvider extends ChangeNotifier {
         productCategory: category,
         fabricImageBase64: base64Fabric,
         refineWithDiffusion: _refineWithDiffusion,
+        tileScale: _tileScale,
+        rotation: _rotation,
+        offsetX: _offsetX,
+        offsetY: _offsetY,
       );
       _finalRenderedResult = result;
       _status = ProcessingStatus.done;
@@ -462,6 +513,9 @@ class VastraProvider extends ChangeNotifier {
     _errorMessage = null;
     _status = ProcessingStatus.idle;
     _statusMessage = '';
+    _lastFabricTextureId = null;
+    _lastCustomFabricBytes = null;
+    resetPlacement();
     notifyListeners();
   }
 }

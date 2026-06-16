@@ -193,6 +193,10 @@ class RenderRequest(BaseModel):
     fabric_image_base64: Optional[str] = Field(None, description="Base64-encoded custom fabric image bytes")
     product_category: Optional[str] = Field(None, description="Category of the product being rendered")
     refine_with_diffusion: bool = Field(False, description="Whether to refine the classically rendered result using a diffusion inpainting model (strength 0.15-0.25)")
+    tile_scale: float = Field(1.0, description="Scale multiplier for the fabric tiling pattern")
+    rotation: float = Field(0.0, description="Rotation angle in degrees for the fabric pattern")
+    offset_x: float = Field(0.0, description="Horizontal shift of the fabric pattern (as fraction of tile width)")
+    offset_y: float = Field(0.0, description="Vertical shift of the fabric pattern (as fraction of tile height)")
 
 
 class UpdateMaskRequest(BaseModel):
@@ -524,6 +528,10 @@ async def api_render(request: RenderRequest):
             fabric_np=fabric_np,
             product_category=category,
             session_id=request.session_id,
+            tile_scale=request.tile_scale,
+            rotation=request.rotation,
+            offset_x=request.offset_x,
+            offset_y=request.offset_y,
         )
 
         # Hybrid diffusion refinement

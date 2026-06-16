@@ -248,9 +248,9 @@ class _CategoryCardState extends State<_CategoryCard>
         child: AnimatedContainer(
           duration: 250.ms,
           decoration: widget.isSelected
-              ? VastraTheme.goldDecoration(borderRadius: 20, glowIntensity: 0.28)
+              ? VastraTheme.goldDecoration(borderRadius: 24, glowIntensity: 0.28)
               : VastraTheme.glassDecoration(
-                  borderRadius: 20,
+                  borderRadius: 24,
                   gradientColors: _cardGradient,
                 ),
           child: Padding(

@@ -246,7 +246,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
         height: 240,
         decoration: BoxDecoration(
           color: VastraColors.surfaceCard,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
           border: Border.all(color: VastraColors.borderLight),
         ),
         child: const Center(
@@ -257,7 +257,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.3),
@@ -267,7 +267,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
         child: Center(
           child: AspectRatio(
             aspectRatio: provider.roomImageAspectRatio,
@@ -471,7 +471,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                   selectedColor: VastraColors.gold.withOpacity(0.25),
                   backgroundColor: Colors.transparent,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(20),
                     side: BorderSide(
                       color: provider.isBrushAdd ? VastraColors.gold : VastraColors.borderLight,
                     ),
@@ -492,7 +492,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                   selectedColor: VastraColors.gold.withOpacity(0.25),
                   backgroundColor: Colors.transparent,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(20),
                     side: BorderSide(
                       color: !provider.isBrushAdd ? VastraColors.gold : VastraColors.borderLight,
                     ),
@@ -558,7 +558,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                         selectedColor: VastraColors.gold.withOpacity(0.25),
                         backgroundColor: Colors.transparent,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(20),
                           side: BorderSide(
                             color: provider.isPositiveSelectionMode
                                 ? VastraColors.gold
@@ -580,7 +580,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                         selectedColor: VastraColors.gold.withOpacity(0.25),
                         backgroundColor: Colors.transparent,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(20),
                           side: BorderSide(
                             color: !provider.isPositiveSelectionMode
                                 ? VastraColors.gold

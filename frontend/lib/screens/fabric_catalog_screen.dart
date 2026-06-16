@@ -91,7 +91,7 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
           onWillPop: () async => false,
           child: Dialog(
             backgroundColor: VastraColors.surfaceCard,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius)),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
               child: Column(
@@ -228,7 +228,7 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
                     border:
                         Border.all(color: VastraColors.gold.withOpacity(0.5)),
                     color: VastraColors.gold.withOpacity(0.08),
@@ -281,7 +281,7 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
       child: Container(
         height: 44,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
           color: VastraColors.surfaceCard,
           border: Border.all(color: VastraColors.borderLight, width: 0.8),
         ),
@@ -336,7 +336,7 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(VastraConstants.chipBorderRadius),
                     color:
                         isActive ? VastraColors.gold : VastraColors.surfaceCard,
                     border: Border.all(
@@ -511,7 +511,7 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
         color: VastraColors.gold.withOpacity(0.10),
         border: Border.all(color: VastraColors.gold.withOpacity(0.35)),
       ),
@@ -603,7 +603,7 @@ class _FabricFingerprintCard extends StatelessWidget {
             duration: 250.ms,
             decoration: isSelected
                 ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -626,7 +626,7 @@ class _FabricFingerprintCard extends StatelessWidget {
                     ],
                   )
                 : BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
                     color: VastraColors.surfaceCard,
                     border:
                         Border.all(color: VastraColors.borderLight, width: 0.8),
@@ -640,7 +640,7 @@ class _FabricFingerprintCard extends StatelessWidget {
             // ── Fabric image / preview ────────────────────────────────────
             ClipRRect(
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(17)),
+                  const BorderRadius.vertical(top: Radius.circular(23)),
               child: SizedBox(
                 height: 130,
                 width: double.infinity,

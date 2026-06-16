@@ -191,6 +191,13 @@ def contour_dominance_filter(mask_np: np.ndarray, points: list = None) -> np.nda
         close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (close_r, close_r))
         clean_mask = cv2.morphologyEx(clean_mask, cv2.MORPH_CLOSE, close_kernel)
 
+    # Smooth the contours to make corners look super good and eliminate staircase artifacts
+    if clean_mask.max() > 0:
+        smooth_k = max(5, int(max(w, h) * 0.005) | 1)
+        smooth_k = smooth_k if smooth_k % 2 == 1 else smooth_k + 1
+        clean_mask_smooth = cv2.GaussianBlur(clean_mask, (smooth_k, smooth_k), 0.0)
+        _, clean_mask = cv2.threshold(clean_mask_smooth, 127, 255, cv2.THRESH_BINARY)
+
     # Explicitly punch out a circle around all negative tap points, scaled by image resolution
     if neg_pixel_points:
         radius = max(25, int(max(w, h) * 0.03))

@@ -41,3 +41,9 @@ frontend/android/build/
 # Backend test outputs
 backend/test_out_*
 
+# Scratch directory
+scratch/
+
+# Environment files
+.env
+backend/.env

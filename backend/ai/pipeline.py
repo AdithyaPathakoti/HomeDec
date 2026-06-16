@@ -42,7 +42,7 @@ CATEGORY_PARAMS = {
         shadow_clamp_lo=0.42,
         shadow_clamp_hi=1.28,
         edge_feather_px=5,
-        tile_fraction=0.30,   # tile = 30% of bbox width
+        tile_fraction=0.85,   # Increased from 0.30 to 0.85 to make fabric patterns look large and premium on the bed
         macro_blur_frac=0.14, # blur radius = 14% of bbox width for fold extraction
         specular_strength=0.07,
     ),
@@ -54,7 +54,7 @@ CATEGORY_PARAMS = {
         shadow_clamp_lo=0.35,
         shadow_clamp_hi=1.35,
         edge_feather_px=5,
-        tile_fraction=0.40,
+        tile_fraction=0.65,   # Increased from 0.40 to 0.65
         macro_blur_frac=0.10,
         specular_strength=0.12,
     ),
@@ -66,7 +66,7 @@ CATEGORY_PARAMS = {
         shadow_clamp_lo=0.45,
         shadow_clamp_hi=1.25,
         edge_feather_px=5,
-        tile_fraction=0.25,
+        tile_fraction=0.70,   # Increased from 0.25 to 0.70
         macro_blur_frac=0.12,
         specular_strength=0.05,
     ),
@@ -78,7 +78,7 @@ CATEGORY_PARAMS = {
         shadow_clamp_lo=0.50,
         shadow_clamp_hi=1.20,
         edge_feather_px=4,
-        tile_fraction=0.50,
+        tile_fraction=0.85,   # Increased from 0.50 to 0.85
         macro_blur_frac=0.18,
         specular_strength=0.06,
     ),
@@ -90,7 +90,7 @@ CATEGORY_PARAMS = {
         shadow_clamp_lo=0.50,
         shadow_clamp_hi=1.18,
         edge_feather_px=5,
-        tile_fraction=0.20,
+        tile_fraction=0.75,   # Increased from 0.20 to 0.75
         macro_blur_frac=0.16,
         specular_strength=0.02,
     ),
@@ -102,7 +102,7 @@ CATEGORY_PARAMS = {
         shadow_clamp_lo=0.50,
         shadow_clamp_hi=1.18,
         edge_feather_px=5,
-        tile_fraction=0.20,
+        tile_fraction=0.75,   # Increased from 0.20 to 0.75
         macro_blur_frac=0.16,
         specular_strength=0.02,
     ),
@@ -115,7 +115,7 @@ CATEGORY_PARAMS = {
         shadow_clamp_lo=0.42,
         shadow_clamp_hi=1.28,
         edge_feather_px=5,
-        tile_fraction=0.30,
+        tile_fraction=0.70,   # Increased from 0.30 to 0.70
         macro_blur_frac=0.13,
         specular_strength=0.06,
     ),
@@ -146,6 +146,10 @@ class TextureProjectionEngine:
         fabric_np: np.ndarray,
         product_category: str,
         session_id: Optional[str] = None,
+        tile_scale: float = 1.0,
+        rotation: float = 0.0,
+        offset_x: float = 0.0,
+        offset_y: float = 0.0,
     ) -> np.ndarray:
         """
         Full photorealistic texture projection pipeline.
@@ -202,14 +206,27 @@ class TextureProjectionEngine:
         # Degenerate fallback
         if h_roi < 8 or w_roi < 8 or full_bbox_w < 8:
             alpha = (mask_np > 127).astype(np.float32)[:, :, np.newaxis]
-            tiled = self._tile_texture(fabric_np, mask_np, full_bbox_w, p, session_id)
+            tiled = self._tile_texture(
+                fabric_np, mask_np, full_bbox_w, p, session_id,
+                tile_scale=tile_scale, rotation=rotation, offset_x=offset_x, offset_y=offset_y
+            )
             return np.clip(
                 tiled.astype(np.float32) * alpha + room_np.astype(np.float32) * (1 - alpha),
                 0, 255
             ).astype(np.uint8)
 
         # ── STAGE 1: Seam-free fabric tiling ─────────────────────────────────
-        tiled_roi = self._tile_texture(fabric_np, mask_roi, full_bbox_w, p, session_id)
+        tiled_roi = self._tile_texture(
+            fabric_np=fabric_np,
+            mask_roi=mask_roi,
+            full_bbox_w=full_bbox_w,
+            p=p,
+            session_id=session_id,
+            tile_scale=tile_scale,
+            rotation=rotation,
+            offset_x=offset_x,
+            offset_y=offset_y,
+        )
 
         # ── STAGE 2: Perspective warp (flat categories only) ──────────────────
         if cat in FLAT_CATEGORIES:
@@ -318,6 +335,13 @@ class TextureProjectionEngine:
         else:
             blended_roi = relit_roi
 
+        # ── STAGE 8.5: Detail Sharpening ──────────────────────────────────────
+        # Enhance print clarity and texture definition of the fabric pattern
+        # using an unsharp mask filter on the RGB relit fabric
+        gaussian_blur = cv2.GaussianBlur(blended_roi, (0, 0), 1.5)
+        sharpened = cv2.addWeighted(blended_roi, 1.25, gaussian_blur, -0.25, 0)
+        blended_roi = np.clip(sharpened, 0, 255).astype(np.uint8)
+
         # ── STAGE 9: Thin-edge Composite ─────────────────────────────────────
         composite_roi = self._composite(room_roi, blended_roi, mask_roi, p["edge_feather_px"])
 
@@ -340,97 +364,65 @@ class TextureProjectionEngine:
         full_bbox_w: int,
         p: dict,
         session_id: Optional[str] = None,
+        tile_scale: float = 1.0,
+        rotation: float = 0.0,
+        offset_x: float = 0.0,
+        offset_y: float = 0.0,
     ) -> np.ndarray:
         """
-        Tile the fabric pattern across the ROI with ZERO visible seams.
-
-        Technique:
-          1. Resize fabric to proportional tile size (tile_fraction of bbox width).
-          2. Build 4 mirror-flip variants (H, V, HV, none) for seam-free tiling.
-          3. Apply a random sub-tile offset (deterministic per session) to break
-             any repetition grid that might align with image features.
-          4. Blend tile seams using a short cross-fade strip so grid is invisible.
+        Tile the fabric pattern across the ROI with customizable scale, rotation, and offset.
+        Uses OpenCV remap with BORDER_WRAP for seamless, high-performance tiling.
         """
         h_roi, w_roi = mask_roi.shape[:2]
         fh, fw = fabric_np.shape[:2]
 
-        # Use a more realistic tile size (at least 40% of bounding box width) to prevent pattern from becoming tiny and noisy
-        tile_w = max(120, int(full_bbox_w * max(p["tile_fraction"], 0.40)))
-        tile_h = max(120, int(tile_w * fh / fw))  # preserve aspect ratio
+        # Base tile size (proportional to bounding box width)
+        base_tile_w = max(150, int(full_bbox_w * max(p["tile_fraction"], 0.60)))
+        
+        # Apply user scaling
+        tile_w = max(50, int(base_tile_w * tile_scale))
+        tile_h = max(50, int(tile_w * fh / fw))
 
-        base = cv2.resize(fabric_np, (tile_w, tile_h), interpolation=cv2.INTER_LANCZOS4)
+        # Output coordinate grids
+        grid_y, grid_x = np.meshgrid(np.arange(h_roi, dtype=np.float32), np.arange(w_roi, dtype=np.float32), indexing='ij')
 
-        # 4 mirror-flip variants for checkerboard tiling (only if mirror_tiling is True)
-        tile_a = base
-        mirror_tiling = p.get("mirror_tiling", False)
-        if mirror_tiling:
-            tile_b = cv2.flip(base, 1)   # flip H
-            tile_c = cv2.flip(base, 0)   # flip V
-            tile_d = cv2.flip(base, -1)  # flip both
-        else:
-            tile_b = tile_a
-            tile_c = tile_a
-            tile_d = tile_a
+        # Center coordinates to rotate around the center of the ROI
+        x_ctr = w_roi / 2.0
+        y_ctr = h_roi / 2.0
+        dx = grid_x - x_ctr
+        dy = grid_y - y_ctr
 
-        # Deterministic offset from session_id to break grid alignment with room structure
+        # Apply deterministic session offset if present
+        sess_off_x = 0.0
+        sess_off_y = 0.0
         if session_id:
             h_int = int(hashlib.md5(session_id.encode()).hexdigest()[:8], 16)
-            off_x = (h_int % tile_w)
-            off_y = ((h_int >> 8) % tile_h)
-        else:
-            off_x = tile_w // 3
-            off_y = tile_h // 4
+            sess_off_x = (h_int % 100) / 100.0
+            sess_off_y = ((h_int >> 8) % 100) / 100.0
 
-        # Build canvas big enough with offset
-        extra_x = off_x + tile_w * 2
-        extra_y = off_y + tile_h * 2
-        reps_x = (w_roi + extra_x) // tile_w + 2
-        reps_y = (h_roi + extra_y) // tile_h + 2
+        # Total translation in normalized fabric coordinates
+        total_off_x = offset_x + sess_off_x
+        total_off_y = offset_y + sess_off_y
 
-        canvas = np.zeros((reps_y * tile_h, reps_x * tile_w, 3), dtype=np.float32)
-        for r in range(reps_y):
-            for c in range(reps_x):
-                t = (tile_a if c % 2 == 0 else tile_b) if r % 2 == 0 else \
-                    (tile_c if c % 2 == 0 else tile_d)
-                y0, x0 = r * tile_h, c * tile_w
-                canvas[y0:y0 + tile_h, x0:x0 + tile_w] = t.astype(np.float32)
+        # Convert rotation from degrees to radians
+        theta = np.radians(rotation)
+        cos_t = np.cos(theta)
+        sin_t = np.sin(theta)
 
-        # Slice with offset applied
-        canvas_crop = canvas[off_y:off_y + h_roi, off_x:off_x + w_roi]
-        if canvas_crop.shape[0] < h_roi or canvas_crop.shape[1] < w_roi:
-            # Safety pad
-            pad = np.zeros((h_roi, w_roi, 3), dtype=np.float32)
-            ch = min(canvas_crop.shape[0], h_roi)
-            cw = min(canvas_crop.shape[1], w_roi)
-            pad[:ch, :cw] = canvas_crop[:ch, :cw]
-            canvas_crop = pad
+        # Scale mapping
+        scale_x = fw / tile_w
+        scale_y = fh / tile_h
 
-        # ── Seam-blur cross-fade strip ─────────────────────────────────────
-        # Reduce seam blur to a very thin strip (2px) to prevent blurring the pattern details
-        seam_blur_px = 2
-        seam_mask = np.ones((h_roi, w_roi), dtype=np.float32)
-        # Mark seam positions along X
-        for c in range(reps_x + 1):
-            sx = c * tile_w - off_x
-            if 0 <= sx < w_roi:
-                x_lo = max(0, sx - seam_blur_px)
-                x_hi = min(w_roi, sx + seam_blur_px)
-                seam_mask[:, x_lo:x_hi] = 0.0
-        # Mark seam positions along Y
-        for r in range(reps_y + 1):
-            sy = r * tile_h - off_y
-            if 0 <= sy < h_roi:
-                y_lo = max(0, sy - seam_blur_px)
-                y_hi = min(h_roi, sy + seam_blur_px)
-                seam_mask[y_lo:y_hi, :] = 0.0
+        map_xf = (dx * cos_t + dy * sin_t) * scale_x + (total_off_x * fw)
+        map_yf = (-dx * sin_t + dy * cos_t) * scale_y + (total_off_y * fh)
 
-        # Blur the seam positions in the canvas and blend back
-        blur_r = 5
-        blurred_canvas = cv2.GaussianBlur(canvas_crop, (blur_r, blur_r), 1.0)
-        seam_mask_3 = seam_mask[:, :, np.newaxis]
-        canvas_crop = canvas_crop * seam_mask_3 + blurred_canvas * (1.0 - seam_mask_3)
-
-        return np.clip(canvas_crop, 0, 255).astype(np.uint8)
+        # Remap using Lanczos interpolation and WRAP border mode
+        tiled = cv2.remap(
+            fabric_np, map_xf.astype(np.float32), map_yf.astype(np.float32),
+            interpolation=cv2.INTER_LANCZOS4,
+            borderMode=cv2.BORDER_WRAP,
+        )
+        return tiled
 
     # ═════════════════════════════════════════════════════════════════════════
     #  STAGE 2 — Planar Perspective Mapping (flat categories)

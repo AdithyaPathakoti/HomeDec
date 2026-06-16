@@ -70,8 +70,8 @@ class _ProductCardState extends State<ProductCard>
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 280),
             decoration: widget.isSelected
-                ? VastraTheme.goldDecoration(borderRadius: 20)
-                : VastraTheme.glassDecoration(borderRadius: 20),
+                ? VastraTheme.goldDecoration(borderRadius: 24)
+                : VastraTheme.glassDecoration(borderRadius: 24),
             child: _buildContent(),
           ),
         ),

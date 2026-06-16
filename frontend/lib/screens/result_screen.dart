@@ -113,6 +113,16 @@ class _ResultScreenState extends State<ResultScreen>
     Navigator.popUntil(context, (route) => route.isFirst);
   }
 
+  void _showAdjustmentPanel() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      barrierColor: Colors.black.withOpacity(0.6),
+      builder: (context) => const _FabricAdjustmentPanel(),
+    );
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -228,14 +238,16 @@ class _ResultScreenState extends State<ResultScreen>
   }
 
   Widget _buildResultView(Uint8List resultBytes) {
+    final isProcessing = context.watch<VastraProvider>().isProcessing;
+
     return ClipRRect(
       key: const ValueKey('result'),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
       child: AnimatedBuilder(
         animation: _glowCtrl,
         builder: (_, child) => Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
             boxShadow: [
               BoxShadow(
                 color: VastraColors.gold.withOpacity(0.12 + _glowCtrl.value * 0.06),
@@ -251,24 +263,39 @@ class _ResultScreenState extends State<ResultScreen>
           ),
           child: child,
         ),
-        child: InteractiveViewer(
-          minScale: 0.8,
-          maxScale: 5.0,
-          child: Image.memory(
-            resultBytes,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            gaplessPlayback: true,
-          )
-              .animate()
-              .scale(
-                begin: const Offset(0.88, 0.88),
-                end: const Offset(1.0, 1.0),
-                duration: 750.ms,
-                curve: Curves.easeOutCubic,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 5.0,
+              child: Image.memory(
+                resultBytes,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                gaplessPlayback: true,
               )
-              .fadeIn(duration: 600.ms),
+                  .animate()
+                  .scale(
+                    begin: const Offset(0.88, 0.88),
+                    end: const Offset(1.0, 1.0),
+                    duration: 750.ms,
+                    curve: Curves.easeOutCubic,
+                  )
+                  .fadeIn(duration: 600.ms),
+            ),
+            if (isProcessing)
+              Container(
+                color: Colors.black.withOpacity(0.55),
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: VastraColors.gold,
+                    strokeWidth: 2.5,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -329,13 +356,29 @@ class _ResultScreenState extends State<ResultScreen>
           VastraConstants.pagePadding, 0, VastraConstants.pagePadding, 28),
       child: Column(
         children: [
-          // Primary: Download
-          _ActionButton(
-            label: 'Save to Gallery',
-            icon: Icons.download_rounded,
-            isPrimary: true,
-            isLoading: _isSaving,
-            onTap: () => _downloadImage(resultBytes),
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: _ActionButton(
+                  label: 'Save to Gallery',
+                  icon: Icons.download_rounded,
+                  isPrimary: true,
+                  isLoading: _isSaving,
+                  onTap: () => _downloadImage(resultBytes),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: _ActionButton(
+                  label: 'Adjust',
+                  icon: Icons.tune_rounded,
+                  isPrimary: false,
+                  onTap: _showAdjustmentPanel,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           Row(
@@ -448,6 +491,194 @@ class _ActionButton extends StatelessWidget {
                   ],
                 ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Fabric Adjustment Panel Bottom Sheet ──────────────────────────────────────
+
+class _FabricAdjustmentPanel extends StatefulWidget {
+  const _FabricAdjustmentPanel();
+
+  @override
+  State<_FabricAdjustmentPanel> createState() => _FabricAdjustmentPanelState();
+}
+
+class _FabricAdjustmentPanelState extends State<_FabricAdjustmentPanel> {
+  late double _localScale;
+  late double _localRotation;
+  late double _localOffsetX;
+  late double _localOffsetY;
+
+  @override
+  void initState() {
+    super.initState();
+    final provider = context.read<VastraProvider>();
+    _localScale = provider.tileScale;
+    _localRotation = provider.rotation;
+    _localOffsetX = provider.offsetX;
+    _localOffsetY = provider.offsetY;
+  }
+
+  void _triggerUpdate() {
+    final provider = context.read<VastraProvider>();
+    provider.setTileScale(_localScale);
+    provider.setRotation(_localRotation);
+    provider.setOffsetX(_localOffsetX);
+    provider.setOffsetY(_localOffsetY);
+
+    if (provider.lastFabricTextureId != null) {
+      provider.renderFinal(
+        provider.lastFabricTextureId!,
+        customFabricBytes: provider.lastCustomFabricBytes,
+      ).catchError((err) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update fabric placement: $err'),
+              backgroundColor: Colors.red[900],
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  void _reset() {
+    setState(() {
+      _localScale = 1.0;
+      _localRotation = 0.0;
+      _localOffsetX = 0.0;
+      _localOffsetY = 0.0;
+    });
+    _triggerUpdate();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: VastraColors.surfaceCard,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(
+          top: BorderSide(color: VastraColors.borderLight, width: 1.0),
+        ),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Drag handle and Title
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: VastraColors.warmGray.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Adjust Fabric Placement',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: VastraColors.ivory,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              TextButton.icon(
+                onPressed: _reset,
+                icon: const Icon(Icons.refresh_rounded, size: 16, color: VastraColors.gold),
+                label: const Text('Reset', style: TextStyle(color: VastraColors.gold, fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Scale Slider
+          _buildSliderRow(
+            label: 'Pattern Scale',
+            value: _localScale,
+            min: 0.2,
+            max: 3.0,
+            displayValue: '${_localScale.toStringAsFixed(1)}x',
+            onChanged: (val) => setState(() => _localScale = val),
+            onChangeEnd: (_) => _triggerUpdate(),
+          ),
+
+          // Rotation Slider
+          _buildSliderRow(
+            label: 'Rotation Angle',
+            value: _localRotation,
+            min: -180.0,
+            max: 180.0,
+            displayValue: '${_localRotation.round()}°',
+            onChanged: (val) => setState(() => _localRotation = val),
+            onChangeEnd: (_) => _triggerUpdate(),
+          ),
+
+          // Offset X Slider
+          _buildSliderRow(
+            label: 'Position X Shift',
+            value: _localOffsetX,
+            min: -1.0,
+            max: 1.0,
+            displayValue: _localOffsetX == 0.0 ? 'Center' : (_localOffsetX > 0 ? '+${(_localOffsetX * 100).round()}%' : '${(_localOffsetX * 100).round()}%'),
+            onChanged: (val) => setState(() => _localOffsetX = val),
+            onChangeEnd: (_) => _triggerUpdate(),
+          ),
+
+          // Offset Y Slider
+          _buildSliderRow(
+            label: 'Position Y Shift',
+            value: _localOffsetY,
+            min: -1.0,
+            max: 1.0,
+            displayValue: _localOffsetY == 0.0 ? 'Center' : (_localOffsetY > 0 ? '+${(_localOffsetY * 100).round()}%' : '${(_localOffsetY * 100).round()}%'),
+            onChanged: (val) => setState(() => _localOffsetY = val),
+            onChangeEnd: (_) => _triggerUpdate(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSliderRow({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required String displayValue,
+    required ValueChanged<double> onChanged,
+    required ValueChanged<double> onChangeEnd,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(color: VastraColors.warmGray, fontSize: 13, fontWeight: FontWeight.w500)),
+              Text(displayValue, style: const TextStyle(color: VastraColors.gold, fontSize: 13, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          Slider(
+            value: value,
+            min: min,
+            max: max,
+            activeColor: VastraColors.gold,
+            inactiveColor: VastraColors.borderLight,
+            onChanged: onChanged,
+            onChangeEnd: onChangeEnd,
+          ),
+        ],
       ),
     );
   }

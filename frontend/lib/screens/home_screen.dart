@@ -170,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
                 color: VastraColors.surface,
                 border: Border.all(color: VastraColors.borderGold.withOpacity(0.5), width: 0.8),
               ),
@@ -467,7 +467,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(VastraConstants.chipBorderRadius),
         color: VastraColors.surface,
         border: Border.all(color: VastraColors.borderLight, width: 0.8),
       ),

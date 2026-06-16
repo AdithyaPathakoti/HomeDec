@@ -20,8 +20,8 @@ class VastraConstants {
   // ── Layout ─────────────────────────────────────────────────────────────────
   static const double pagePadding = 24.0;
   static const double pageHPadding = 24.0;
-  static const double cardBorderRadius = 20.0;
-  static const double buttonBorderRadius = 16.0;
+  static const double cardBorderRadius = 24.0;
+  static const double buttonBorderRadius = 20.0;
   static const double chipBorderRadius = 24.0;
 
   // ── Image Constraints ─────────────────────────────────────────────────────

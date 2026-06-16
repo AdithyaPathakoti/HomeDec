@@ -165,7 +165,7 @@ class VastraTheme {
 
   /// Warm glassmorphism card — the primary card style
   static BoxDecoration glassDecoration({
-    double borderRadius = 20,
+    double borderRadius = 24,
     Color? borderColor,
     List<Color>? gradientColors,
     List<BoxShadow>? shadows,
@@ -198,7 +198,7 @@ class VastraTheme {
 
   /// Gold glow decoration — for selected/active states
   static BoxDecoration goldDecoration({
-    double borderRadius = 20,
+    double borderRadius = 24,
     double glowIntensity = 0.35,
     List<Color>? gradientColors,
   }) {

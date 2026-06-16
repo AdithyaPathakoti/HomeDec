@@ -92,6 +92,10 @@ class ApiService {
     required String productCategory,
     String? fabricImageBase64,
     bool refineWithDiffusion = false,
+    double tileScale = 1.0,
+    double rotation = 0.0,
+    double offsetX = 0.0,
+    double offsetY = 0.0,
   }) async {
     final uri = Uri.parse(
         '${VastraConstants.baseUrl}${VastraConstants.renderEndpoint}');
@@ -101,6 +105,10 @@ class ApiService {
       'fabric_texture_id': fabricTextureId,
       'product_category': productCategory,
       'refine_with_diffusion': refineWithDiffusion,
+      'tile_scale': tileScale,
+      'rotation': rotation,
+      'offset_x': offsetX,
+      'offset_y': offsetY,
     };
     if (fabricImageBase64 != null) {
       payload['fabric_image_base64'] = fabricImageBase64;
