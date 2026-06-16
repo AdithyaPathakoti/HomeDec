@@ -219,6 +219,14 @@ class TextureProjectionEngine:
             ).astype(np.uint8)
 
         # ── STAGE 1: Seam-free fabric tiling ─────────────────────────────────
+        if cat in FLAT_CATEGORIES:
+            f = 0.18  # perspective strength
+            pad_w = int(w_roi * f / (1.0 - f)) + 32
+            pad_h = int(h_roi * f / (1.0 - f)) + 32
+        else:
+            pad_w = 0
+            pad_h = 0
+
         tiled_roi = self._tile_texture(
             fabric_np=fabric_np,
             mask_roi=mask_roi,
@@ -230,11 +238,13 @@ class TextureProjectionEngine:
             offset_x=offset_x,
             offset_y=offset_y,
             depth_roi=depth_roi,
+            pad_h=pad_h,
+            pad_w=pad_w,
         )
 
         # ── STAGE 2: Perspective warp (flat categories only) ──────────────────
         if cat in FLAT_CATEGORIES:
-            perspective_roi = self._perspective_map(tiled_roi, mask_roi, cat)
+            perspective_roi = self._perspective_map(tiled_roi, mask_roi, cat, pad_h, pad_w)
         else:
             perspective_roi = tiled_roi
 
@@ -372,6 +382,8 @@ class TextureProjectionEngine:
         offset_x: float = 0.0,
         offset_y: float = 0.0,
         depth_roi: Optional[np.ndarray] = None,
+        pad_h: int = 0,
+        pad_w: int = 0,
     ) -> np.ndarray:
         """
         Tile the fabric pattern across the ROI with customizable scale, rotation, and offset.
@@ -384,8 +396,15 @@ class TextureProjectionEngine:
         # Base tile size (proportional to bounding box width)
         base_tile_w = max(150.0, float(full_bbox_w * max(p["tile_fraction"], 0.60)))
 
-        # Output coordinate grids
-        grid_y, grid_x = np.meshgrid(np.arange(h_roi, dtype=np.float32), np.arange(w_roi, dtype=np.float32), indexing='ij')
+        # Output coordinate grids (padded if requested)
+        if pad_h > 0 or pad_w > 0:
+            grid_y, grid_x = np.meshgrid(
+                np.arange(-pad_h, h_roi + pad_h, dtype=np.float32),
+                np.arange(-pad_w, w_roi + pad_w, dtype=np.float32),
+                indexing='ij'
+            )
+        else:
+            grid_y, grid_x = np.meshgrid(np.arange(h_roi, dtype=np.float32), np.arange(w_roi, dtype=np.float32), indexing='ij')
 
         # Center coordinates to rotate around the center of the ROI
         x_ctr = w_roi / 2.0
@@ -394,7 +413,11 @@ class TextureProjectionEngine:
         dy = grid_y - y_ctr
 
         if depth_roi is not None:
-            depth_roi_f = depth_roi.astype(np.float32)
+            if pad_h > 0 or pad_w > 0:
+                depth_padded = cv2.copyMakeBorder(depth_roi, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_REPLICATE)
+            else:
+                depth_padded = depth_roi
+            depth_roi_f = depth_padded.astype(np.float32)
             # 1. Adaptive Scale: farther areas (lower depth) have smaller pattern sizes (denser tiling);
             # closer areas (larger depth) have larger pattern sizes.
             scale_local = tile_scale * (0.5 + 0.8 * depth_roi_f)
@@ -464,9 +487,11 @@ class TextureProjectionEngine:
 
     def _perspective_map(
         self,
-        tiled_roi: np.ndarray,
+        tiled_padded: np.ndarray,
         mask_roi: np.ndarray,
         product_category: str,
+        pad_h: int,
+        pad_w: int,
     ) -> np.ndarray:
         """
         Row-wise horizontal compression for flat objects (rugs, bedsheets).
@@ -474,28 +499,21 @@ class TextureProjectionEngine:
         Factor 0.18 gives a gentle, realistic recede without distortion.
         """
         if product_category.lower() not in FLAT_CATEGORIES:
-            return tiled_roi
+            return tiled_padded
 
         H_roi, W_roi = mask_roi.shape[:2]
         ys, xs = np.where(mask_roi > 127)
         if len(xs) == 0:
-            return tiled_roi
+            return tiled_padded
 
         y_min_mask, y_max_mask = int(ys.min()), int(ys.max())
         x_min_mask, x_max_mask = int(xs.min()), int(xs.max())
 
         if (y_max_mask - y_min_mask) < 2 or (x_max_mask - x_min_mask) < 2:
-            return tiled_roi
+            return tiled_padded
 
         x_center = float(xs.mean())
         f = 0.18  # perspective strength
-
-        # Pad canvas to prevent replication/smearing at borders
-        pad_w = int(W_roi * f / (1.0 - f)) + 32
-        pad_h = int(H_roi * f / (1.0 - f)) + 32
-
-        # Create padded tiled_roi using BORDER_WRAP to dynamically wrap pattern
-        tiled_padded = cv2.copyMakeBorder(tiled_roi, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_WRAP)
 
         y_indices = np.arange(H_roi, dtype=np.float32)
         v = np.clip(

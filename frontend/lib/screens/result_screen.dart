@@ -260,63 +260,63 @@ class _ResultScreenState extends State<ResultScreen>
   Widget _buildResultView(Uint8List resultBytes) {
     final isProcessing = context.watch<VastraProvider>().isProcessing;
 
-    return ClipRRect(
-      key: const ValueKey('result'),
-      borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
-      child: AnimatedBuilder(
-        animation: _glowCtrl,
-        builder: (_, child) => Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
-            boxShadow: [
-              BoxShadow(
-                color: VastraColors.gold.withOpacity(0.12 + _glowCtrl.value * 0.06),
-                blurRadius: 32,
-                spreadRadius: 2,
-              ),
-              BoxShadow(
-                color: VastraColors.terracotta.withOpacity(0.08),
-                blurRadius: 60,
-                spreadRadius: 4,
-              ),
-            ],
-          ),
-          child: child,
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 5.0,
-              child: Image.memory(
-                resultBytes,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-                gaplessPlayback: true,
-              )
-                  .animate()
-                  .scale(
-                    begin: const Offset(0.88, 0.88),
-                    end: const Offset(1.0, 1.0),
-                    duration: 750.ms,
-                    curve: Curves.easeOutCubic,
-                  )
-                  .fadeIn(duration: 600.ms),
+    return AnimatedBuilder(
+      animation: _glowCtrl,
+      builder: (_, child) => Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
+          boxShadow: [
+            BoxShadow(
+              color: VastraColors.gold.withOpacity(0.12 + _glowCtrl.value * 0.06),
+              blurRadius: 32,
+              spreadRadius: 2,
             ),
-            if (isProcessing)
-              Container(
-                color: Colors.black.withOpacity(0.55),
-                child: const Center(
-                  child: CircularProgressIndicator(
-                    color: VastraColors.gold,
-                    strokeWidth: 2.5,
-                  ),
-                ),
-              ),
+            BoxShadow(
+              color: VastraColors.terracotta.withOpacity(0.08),
+              blurRadius: 60,
+              spreadRadius: 4,
+            ),
           ],
         ),
+        child: ClipRRect(
+          key: const ValueKey('result'),
+          borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
+          child: child,
+        ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          InteractiveViewer(
+            minScale: 0.8,
+            maxScale: 5.0,
+            child: Image.memory(
+              resultBytes,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              gaplessPlayback: true,
+            )
+                .animate()
+                .scale(
+                  begin: const Offset(0.88, 0.88),
+                  end: const Offset(1.0, 1.0),
+                  duration: 750.ms,
+                  curve: Curves.easeOutCubic,
+                )
+                .fadeIn(duration: 600.ms),
+          ),
+          if (isProcessing)
+            Container(
+              color: Colors.black.withOpacity(0.55),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: VastraColors.gold,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -582,9 +582,6 @@ class _FabricAdjustmentPanelState extends State<_FabricAdjustmentPanel> {
       decoration: const BoxDecoration(
         color: VastraColors.surfaceCard,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(
-          top: BorderSide(color: VastraColors.borderLight, width: 1.0),
-        ),
       ),
       padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 32),
       child: Column(
