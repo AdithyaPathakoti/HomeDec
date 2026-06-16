@@ -498,15 +498,19 @@ class _ActionButton extends StatelessWidget {
                       color: isPrimary ? VastraColors.textOnGold : VastraColors.warmGray,
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      label,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: isPrimary
-                                ? VastraColors.textOnGold
-                                : VastraColors.warmGray,
-                            fontWeight: FontWeight.w600,
-                            fontSize: isPrimary ? 14 : 12,
-                          ),
+                    Flexible(
+                      child: Text(
+                        label,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                              color: isPrimary
+                                  ? VastraColors.textOnGold
+                                  : VastraColors.warmGray,
+                              fontWeight: FontWeight.w600,
+                              fontSize: isPrimary ? 14 : 12,
+                            ),
+                      ),
                     ),
                   ],
                 ),
@@ -584,85 +588,87 @@ class _FabricAdjustmentPanelState extends State<_FabricAdjustmentPanel> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Drag handle and Title
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: VastraColors.warmGray.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Drag handle and Title
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: VastraColors.warmGray.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Adjust Fabric Placement',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: VastraColors.ivory,
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              TextButton.icon(
-                onPressed: _reset,
-                icon: const Icon(Icons.refresh_rounded, size: 16, color: VastraColors.gold),
-                label: const Text('Reset', style: TextStyle(color: VastraColors.gold, fontSize: 13, fontWeight: FontWeight.w600)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Scale Slider
-          _buildSliderRow(
-            label: 'Pattern Scale',
-            value: _localScale,
-            min: 0.2,
-            max: 3.0,
-            displayValue: '${_localScale.toStringAsFixed(1)}x',
-            onChanged: (val) => setState(() => _localScale = val),
-            onChangeEnd: (_) => _triggerUpdate(),
-          ),
-
-          // Rotation Slider
-          _buildSliderRow(
-            label: 'Rotation Angle',
-            value: _localRotation,
-            min: -180.0,
-            max: 180.0,
-            displayValue: '${_localRotation.round()}°',
-            onChanged: (val) => setState(() => _localRotation = val),
-            onChangeEnd: (_) => _triggerUpdate(),
-          ),
-
-          // Offset X Slider
-          _buildSliderRow(
-            label: 'Position X Shift',
-            value: _localOffsetX,
-            min: -1.0,
-            max: 1.0,
-            displayValue: _localOffsetX == 0.0 ? 'Center' : (_localOffsetX > 0 ? '+${(_localOffsetX * 100).round()}%' : '${(_localOffsetX * 100).round()}%'),
-            onChanged: (val) => setState(() => _localOffsetX = val),
-            onChangeEnd: (_) => _triggerUpdate(),
-          ),
-
-          // Offset Y Slider
-          _buildSliderRow(
-            label: 'Position Y Shift',
-            value: _localOffsetY,
-            min: -1.0,
-            max: 1.0,
-            displayValue: _localOffsetY == 0.0 ? 'Center' : (_localOffsetY > 0 ? '+${(_localOffsetY * 100).round()}%' : '${(_localOffsetY * 100).round()}%'),
-            onChanged: (val) => setState(() => _localOffsetY = val),
-            onChangeEnd: (_) => _triggerUpdate(),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Adjust Fabric Placement',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: VastraColors.ivory,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                TextButton.icon(
+                  onPressed: _reset,
+                  icon: const Icon(Icons.refresh_rounded, size: 16, color: VastraColors.gold),
+                  label: const Text('Reset', style: TextStyle(color: VastraColors.gold, fontSize: 13, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+  
+            // Scale Slider
+            _buildSliderRow(
+              label: 'Pattern Scale',
+              value: _localScale,
+              min: 0.2,
+              max: 3.0,
+              displayValue: '${_localScale.toStringAsFixed(1)}x',
+              onChanged: (val) => setState(() => _localScale = val),
+              onChangeEnd: (_) => _triggerUpdate(),
+            ),
+  
+            // Rotation Slider
+            _buildSliderRow(
+              label: 'Rotation Angle',
+              value: _localRotation,
+              min: -180.0,
+              max: 180.0,
+              displayValue: '${_localRotation.round()}°',
+              onChanged: (val) => setState(() => _localRotation = val),
+              onChangeEnd: (_) => _triggerUpdate(),
+            ),
+  
+            // Offset X Slider
+            _buildSliderRow(
+              label: 'Position X Shift',
+              value: _localOffsetX,
+              min: -1.0,
+              max: 1.0,
+              displayValue: _localOffsetX == 0.0 ? 'Center' : (_localOffsetX > 0 ? '+${(_localOffsetX * 100).round()}%' : '${(_localOffsetX * 100).round()}%'),
+              onChanged: (val) => setState(() => _localOffsetX = val),
+              onChangeEnd: (_) => _triggerUpdate(),
+            ),
+  
+            // Offset Y Slider
+            _buildSliderRow(
+              label: 'Position Y Shift',
+              value: _localOffsetY,
+              min: -1.0,
+              max: 1.0,
+              displayValue: _localOffsetY == 0.0 ? 'Center' : (_localOffsetY > 0 ? '+${(_localOffsetY * 100).round()}%' : '${(_localOffsetY * 100).round()}%'),
+              onChanged: (val) => setState(() => _localOffsetY = val),
+              onChangeEnd: (_) => _triggerUpdate(),
+            ),
+          ],
+        ),
       ),
     );
   }
