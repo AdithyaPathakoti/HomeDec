@@ -63,7 +63,8 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
 
     // Check if the tap is close to an existing point to delete it
     int clickedPointIndex = -1;
-    const double clickThreshold = 24.0; // logical pixels
+    final scale = _transformationController.value.getMaxScaleOnAxis().clamp(1.0, 5.0);
+    final double clickThreshold = 24.0 / scale; // Adjust threshold based on zoom level
 
     for (int i = 0; i < provider.interactivePoints.length; i++) {
       final pt = provider.interactivePoints[i];
@@ -387,37 +388,57 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
 
                           // Interaction Coordinates / Dots
                           if (!provider.isBrushMode)
-                            ...provider.interactivePoints.map((pt) {
-                              final double posX = pt['x'] * constraints.maxWidth;
-                              final double posY = pt['y'] * constraints.maxHeight;
-                              final bool isPositive = pt['label'] == 1;
+                            ValueListenableBuilder<Matrix4>(
+                              valueListenable: _transformationController,
+                              builder: (context, matrix, child) {
+                                final scale = matrix.getMaxScaleOnAxis().clamp(1.0, 5.0);
+                                final double dotSize = 20.0 / scale;
+                                final double halfSize = dotSize / 2.0;
+                                final double borderWidth = 2.0 / scale;
+                                final double iconSize = 10.0 / scale;
+                                final double shadowBlur = 6.0 / scale;
+                                final double shadowOffsetY = 2.0 / scale;
 
-                              return Positioned(
-                                left: posX - 10,
-                                top: posY - 10,
-                                child: Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: isPositive ? Colors.green.withOpacity(0.85) : Colors.red.withOpacity(0.85),
-                                    border: Border.all(color: Colors.white, width: 2.0),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.4),
-                                        blurRadius: 6,
-                                        offset: const Offset(0, 2),
-                                      )
-                                    ],
-                                  ),
-                                  child: Icon(
-                                    isPositive ? Icons.add : Icons.remove,
-                                    size: 10,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              );
-                            }),
+                                return Stack(
+                                  children: provider.interactivePoints.map((pt) {
+                                    final double posX = pt['x'] * constraints.maxWidth;
+                                    final double posY = pt['y'] * constraints.maxHeight;
+                                    final bool isPositive = pt['label'] == 1;
+
+                                    return Positioned(
+                                      left: posX - halfSize,
+                                      top: posY - halfSize,
+                                      child: Container(
+                                        width: dotSize,
+                                        height: dotSize,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: isPositive
+                                              ? Colors.green.withOpacity(0.85)
+                                              : Colors.red.withOpacity(0.85),
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: borderWidth,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.4),
+                                              blurRadius: shadowBlur,
+                                              offset: Offset(0, shadowOffsetY),
+                                            )
+                                          ],
+                                        ),
+                                        child: Icon(
+                                          isPositive ? Icons.add : Icons.remove,
+                                          size: iconSize,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                );
+                              },
+                            ),
 
                           // Floating Reset Zoom indicator
                           if (_isZoomed)
