@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: vastra-backend
+    env: docker
+    dockerContext: backend
+    dockerfilePath: Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: HF_TOKEN
+        sync: false
