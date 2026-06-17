@@ -17,28 +17,10 @@ class ResultScreen extends StatefulWidget {
   State<ResultScreen> createState() => _ResultScreenState();
 }
 
-class _ResultScreenState extends State<ResultScreen>
-    with SingleTickerProviderStateMixin {
+class _ResultScreenState extends State<ResultScreen> {
   bool _showComparison = false;
   bool _isSaving = false;
   bool _isSharing = false;
-
-  late final AnimationController _glowCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _glowCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _glowCtrl.dispose();
-    super.dispose();
-  }
 
   // ── Save to device ─────────────────────────────────────────────────────────
 
@@ -62,7 +44,7 @@ class _ResultScreenState extends State<ResultScreen>
           content: Text('Saved to gallery: $fileName'),
           action: SnackBarAction(
             label: 'OK',
-            textColor: VastraColors.gold,
+            textColor: VastraColors.ivory,
             onPressed: () {},
           ),
         ),
@@ -122,7 +104,7 @@ class _ResultScreenState extends State<ResultScreen>
       builder: (context) => const _FabricAdjustmentPanel(),
     ).then((_) {
       if (!mounted) return;
-      // Bake the final AI image with diffusion refinement once user finishes adjustment and closes bottom sheet
+      // Bake the final AI image once adjustment closes
       final provider = context.read<VastraProvider>();
       if (provider.refineWithDiffusion && provider.lastFabricTextureId != null) {
         provider.renderFinal(
@@ -155,43 +137,52 @@ class _ResultScreenState extends State<ResultScreen>
       return const Scaffold(
         backgroundColor: VastraColors.background,
         body: Center(
-          child: CircularProgressIndicator(color: VastraColors.gold),
+          child: CircularProgressIndicator(color: VastraColors.ivory, strokeWidth: 2.0),
         ),
       );
     }
 
     return Scaffold(
       backgroundColor: VastraColors.background,
-      body: Stack(
-        children: [
-          Container(decoration: const BoxDecoration(gradient: VastraTheme.deepGradient)),
-          SafeArea(
-            child: Column(
-              children: [
-                _buildAppBar(provider),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: VastraConstants.pagePadding),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 350),
-                      child: _showComparison && roomBytes != null
-                          ? BeforeAfterSlider(
-                              key: const ValueKey('comparison'),
-                              beforeBytes: roomBytes,
-                              afterBytes: resultBytes,
-                            )
-                          : _buildResultView(resultBytes),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildAppBar(provider),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: VastraConstants.pagePadding),
+                  child: AspectRatio(
+                    aspectRatio: provider.roomImageAspectRatio,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: VastraColors.border, width: 1.0),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: _showComparison && roomBytes != null
+                              ? BeforeAfterSlider(
+                                  key: const ValueKey('comparison'),
+                                  beforeBytes: roomBytes,
+                                  afterBytes: resultBytes,
+                                )
+                              : _buildResultView(resultBytes),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                if (roomBytes != null) _buildCompareToggle(),
-                const SizedBox(height: 20),
-                _buildActionButtons(resultBytes),
-              ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            if (roomBytes != null) _buildCompareToggle(),
+            const SizedBox(height: 16),
+            _buildActionButtons(resultBytes),
+          ],
+        ),
       ),
     );
   }
@@ -212,44 +203,32 @@ class _ResultScreenState extends State<ResultScreen>
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const Spacer(),
-          // AI Generated badge with gold glow
-          AnimatedBuilder(
-            animation: _glowCtrl,
-            builder: (_, __) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: VastraColors.gold.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: VastraColors.gold.withOpacity(0.35 + _glowCtrl.value * 0.2),
-                  width: 0.8,
+          // AI Generated badge (Shadcn Style)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: VastraColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: VastraColors.border,
+                width: 1.0,
+              ),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.auto_awesome_rounded, size: 12, color: VastraColors.ivory),
+                SizedBox(width: 6),
+                Text(
+                  'AI Generated',
+                  style: TextStyle(
+                    color: VastraColors.ivory,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Inter',
+                  ),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: VastraColors.gold.withOpacity(0.15 * _glowCtrl.value),
-                    blurRadius: 12,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.auto_awesome_rounded,
-                      size: 12,
-                      color: VastraColors.gold.withOpacity(0.8 + _glowCtrl.value * 0.2)),
-                  const SizedBox(width: 5),
-                  Text(
-                    'AI Generated',
-                    style: TextStyle(
-                      color: VastraColors.gold.withOpacity(0.9),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
           ),
         ],
@@ -260,64 +239,32 @@ class _ResultScreenState extends State<ResultScreen>
   Widget _buildResultView(Uint8List resultBytes) {
     final isProcessing = context.watch<VastraProvider>().isProcessing;
 
-    return AnimatedBuilder(
-      animation: _glowCtrl,
-      builder: (_, child) => Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
-          boxShadow: [
-            BoxShadow(
-              color: VastraColors.gold.withOpacity(0.12 + _glowCtrl.value * 0.06),
-              blurRadius: 32,
-              spreadRadius: 2,
-            ),
-            BoxShadow(
-              color: VastraColors.terracotta.withOpacity(0.08),
-              blurRadius: 60,
-              spreadRadius: 4,
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          key: const ValueKey('result'),
-          borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
-          child: child,
-        ),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          InteractiveViewer(
-            minScale: 0.8,
-            maxScale: 5.0,
-            child: Image.memory(
-              resultBytes,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              gaplessPlayback: true,
-            )
-                .animate()
-                .scale(
-                  begin: const Offset(0.88, 0.88),
-                  end: const Offset(1.0, 1.0),
-                  duration: 750.ms,
-                  curve: Curves.easeOutCubic,
-                )
-                .fadeIn(duration: 600.ms),
+    return Stack(
+      key: const ValueKey('result'),
+      fit: StackFit.expand,
+      children: [
+        InteractiveViewer(
+          minScale: 1.0,
+          maxScale: 5.0,
+          child: Image.memory(
+            resultBytes,
+            fit: BoxFit.fill,
+            width: double.infinity,
+            height: double.infinity,
+            gaplessPlayback: true,
           ),
-          if (isProcessing)
-            Container(
-              color: Colors.black.withOpacity(0.55),
-              child: const Center(
-                child: CircularProgressIndicator(
-                  color: VastraColors.gold,
-                  strokeWidth: 2.5,
-                ),
+        ),
+        if (isProcessing)
+          Container(
+            color: Colors.black.withOpacity(0.55),
+            child: const Center(
+              child: CircularProgressIndicator(
+                color: VastraColors.ivory,
+                strokeWidth: 2.0,
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -325,43 +272,32 @@ class _ResultScreenState extends State<ResultScreen>
     return GestureDetector(
       onTap: () => setState(() => _showComparison = !_showComparison),
       child: AnimatedContainer(
-        duration: 250.ms,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        duration: 150.ms,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          color: _showComparison
-              ? VastraColors.gold.withOpacity(0.15)
-              : VastraColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          color: _showComparison ? VastraColors.ivory : Colors.transparent,
           border: Border.all(
-            color: _showComparison
-                ? VastraColors.gold.withOpacity(0.6)
-                : VastraColors.borderLight,
-            width: _showComparison ? 1.2 : 0.8,
+            color: _showComparison ? VastraColors.ivory : VastraColors.border,
+            width: 1.0,
           ),
-          boxShadow: _showComparison
-              ? [
-                  BoxShadow(
-                    color: VastraColors.gold.withOpacity(0.15),
-                    blurRadius: 12,
-                  ),
-                ]
-              : [],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.compare_rounded,
-              size: 16,
-              color: _showComparison ? VastraColors.gold : VastraColors.warmGrayDark,
+              size: 14,
+              color: _showComparison ? VastraColors.background : VastraColors.textSecondary,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Text(
               _showComparison ? 'Show Result Only' : 'Before / After',
               style: TextStyle(
-                color: _showComparison ? VastraColors.gold : VastraColors.warmGrayDark,
-                fontSize: 13,
+                color: _showComparison ? VastraColors.background : VastraColors.textSecondary,
+                fontSize: 12,
                 fontWeight: FontWeight.w500,
+                fontFamily: 'Inter',
               ),
             ),
           ],
@@ -372,8 +308,7 @@ class _ResultScreenState extends State<ResultScreen>
 
   Widget _buildActionButtons(Uint8List resultBytes) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          VastraConstants.pagePadding, 0, VastraConstants.pagePadding, 28),
+      padding: const EdgeInsets.fromLTRB(VastraConstants.pagePadding, 0, VastraConstants.pagePadding, 24),
       child: Column(
         children: [
           Row(
@@ -388,7 +323,7 @@ class _ResultScreenState extends State<ResultScreen>
                   onTap: () => _downloadImage(resultBytes),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 flex: 2,
                 child: _ActionButton(
@@ -400,7 +335,7 @@ class _ResultScreenState extends State<ResultScreen>
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -412,7 +347,7 @@ class _ResultScreenState extends State<ResultScreen>
                   onTap: () => _shareImage(resultBytes),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: _ActionButton(
                   label: 'Try Another',
@@ -421,7 +356,7 @@ class _ResultScreenState extends State<ResultScreen>
                   onTap: _tryAnotherFabric,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: _ActionButton(
                   label: 'Start Over',
@@ -459,34 +394,19 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: isLoading ? null : onTap,
-      child: AnimatedContainer(
-        duration: 250.ms,
-        height: 52,
+      child: Container(
+        height: 48,
         decoration: isPrimary
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
-                gradient: VastraTheme.goldGradient,
-                boxShadow: [
-                  BoxShadow(
-                    color: VastraColors.gold.withOpacity(0.30),
-                    blurRadius: 18,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              )
-            : BoxDecoration(
-                borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
-                color: VastraColors.surface,
-                border: Border.all(color: VastraColors.borderLight),
-              ),
+            ? VastraTheme.goldDecoration(borderRadius: 12)
+            : VastraTheme.glassDecoration(borderRadius: 12),
         child: Center(
           child: isLoading
               ? SizedBox(
-                  width: 18,
-                  height: 18,
+                  width: 16,
+                  height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 1.5,
-                    color: isPrimary ? VastraColors.textOnGold : VastraColors.gold,
+                    color: isPrimary ? VastraColors.background : VastraColors.ivory,
                   ),
                 )
               : Row(
@@ -494,8 +414,8 @@ class _ActionButton extends StatelessWidget {
                   children: [
                     Icon(
                       icon,
-                      size: 16,
-                      color: isPrimary ? VastraColors.textOnGold : VastraColors.warmGray,
+                      size: 15,
+                      color: isPrimary ? VastraColors.background : VastraColors.ivory,
                     ),
                     const SizedBox(width: 6),
                     Flexible(
@@ -504,11 +424,9 @@ class _ActionButton extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: isPrimary
-                                  ? VastraColors.textOnGold
-                                  : VastraColors.warmGray,
+                              color: isPrimary ? VastraColors.background : VastraColors.ivory,
                               fontWeight: FontWeight.w600,
-                              fontSize: isPrimary ? 14 : 12,
+                              fontSize: 13,
                             ),
                       ),
                     ),
@@ -583,11 +501,19 @@ class _FabricAdjustmentPanelState extends State<_FabricAdjustmentPanel> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: VastraColors.surfaceCard,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.55),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: const Offset(0, -4),
+          )
+        ],
       ),
-      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 32),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 28),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -596,10 +522,10 @@ class _FabricAdjustmentPanelState extends State<_FabricAdjustmentPanel> {
             // Drag handle and Title
             Center(
               child: Container(
-                width: 40,
+                width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: VastraColors.warmGray.withOpacity(0.3),
+                  color: VastraColors.border,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -617,12 +543,12 @@ class _FabricAdjustmentPanelState extends State<_FabricAdjustmentPanel> {
                 ),
                 TextButton.icon(
                   onPressed: _reset,
-                  icon: const Icon(Icons.refresh_rounded, size: 16, color: VastraColors.gold),
-                  label: const Text('Reset', style: TextStyle(color: VastraColors.gold, fontSize: 13, fontWeight: FontWeight.w600)),
+                  icon: const Icon(Icons.refresh_rounded, size: 14, color: VastraColors.ivory),
+                  label: const Text('Reset', style: TextStyle(color: VastraColors.ivory, fontSize: 12, fontWeight: FontWeight.w600)),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
   
             // Scale Slider
             _buildSliderRow(
@@ -683,22 +609,22 @@ class _FabricAdjustmentPanelState extends State<_FabricAdjustmentPanel> {
     required ValueChanged<double> onChangeEnd,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label, style: const TextStyle(color: VastraColors.warmGray, fontSize: 13, fontWeight: FontWeight.w500)),
-              Text(displayValue, style: const TextStyle(color: VastraColors.gold, fontSize: 13, fontWeight: FontWeight.bold)),
+              Text(label, style: const TextStyle(color: VastraColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
+              Text(displayValue, style: const TextStyle(color: VastraColors.ivory, fontSize: 13, fontWeight: FontWeight.bold)),
             ],
           ),
           Slider(
             value: value,
             min: min,
             max: max,
-            activeColor: VastraColors.gold,
-            inactiveColor: VastraColors.borderLight,
+            activeColor: VastraColors.ivory,
+            inactiveColor: VastraColors.border,
             onChanged: onChanged,
             onChangeEnd: onChangeEnd,
           ),

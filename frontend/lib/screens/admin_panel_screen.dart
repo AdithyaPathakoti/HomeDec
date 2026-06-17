@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
@@ -38,41 +37,41 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: VastraColors.background,
-      body: Stack(
-        children: [
-          Container(decoration: const BoxDecoration(gradient: VastraTheme.deepGradient)),
-          SafeArea(
-            child: Column(
-              children: [
-                _buildAppBar(),
-                _buildAnalyticsBanner(),
-                _buildTabBar(),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabCtrl,
-                    children: [
-                      _CatalogTab(),
-                      _AddFabricTab(),
-                    ],
-                  ),
-                ),
-              ],
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildAppBar(),
+            _buildAnalyticsBanner(),
+            _buildTabBar(),
+            Expanded(
+              child: TabBarView(
+                controller: _tabCtrl,
+                children: [
+                  _CatalogTab(),
+                  _AddFabricTab(),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _tabCtrl.animateTo(1),
-        backgroundColor: VastraColors.gold,
-        icon: const Icon(Icons.add_rounded, color: VastraColors.textOnGold),
-        label: Text(
+        backgroundColor: VastraColors.ivory,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: VastraColors.border),
+        ),
+        icon: const Icon(Icons.add_rounded, color: VastraColors.background),
+        label: const Text(
           'Add Fabric',
           style: TextStyle(
-            color: VastraColors.textOnGold,
+            color: VastraColors.background,
             fontWeight: FontWeight.w600,
+            fontFamily: 'Inter',
           ),
         ),
-        elevation: 4,
       ),
     );
   }
@@ -95,25 +94,26 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                 'Admin Panel',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
+              const SizedBox(height: 2),
               Text(
                 'Fabric Catalog Management',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
-                    ?.copyWith(color: VastraColors.gold.withOpacity(0.7)),
+                    ?.copyWith(color: VastraColors.textSecondary),
               ),
             ],
           ),
           const Spacer(),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: VastraColors.gold.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: VastraColors.gold.withOpacity(0.3)),
+              color: VastraColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: VastraColors.border, width: 1.0),
             ),
             child: const Icon(Icons.admin_panel_settings_rounded,
-                size: 18, color: VastraColors.gold),
+                size: 18, color: VastraColors.ivory),
           ),
         ],
       ),
@@ -123,29 +123,25 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   Widget _buildAnalyticsBanner() {
     return Consumer<FabricCatalogProvider>(
       builder: (_, catalog, __) => Padding(
-        padding: const EdgeInsets.fromLTRB(
-            VastraConstants.pagePadding, 16, VastraConstants.pagePadding, 0),
+        padding: const EdgeInsets.fromLTRB(VastraConstants.pagePadding, 16, VastraConstants.pagePadding, 0),
         child: Row(
           children: [
             _StatChip(
               label: 'Total Published',
               value: '${catalog.totalPublished}',
               icon: Icons.texture_rounded,
-              color: VastraColors.gold,
             ),
             const SizedBox(width: 10),
             _StatChip(
               label: 'User Uploaded',
               value: '${catalog.totalUserUploaded}',
               icon: Icons.upload_rounded,
-              color: VastraColors.terracotta,
             ),
             const SizedBox(width: 10),
             _StatChip(
               label: 'Categories',
               value: '${catalog.categoryBreakdown.keys.length}',
               icon: Icons.category_rounded,
-              color: const Color(0xFF4CAF82),
             ),
           ],
         ),
@@ -155,25 +151,26 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
 
   Widget _buildTabBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          VastraConstants.pagePadding, 16, VastraConstants.pagePadding, 0),
+      padding: const EdgeInsets.fromLTRB(VastraConstants.pagePadding, 16, VastraConstants.pagePadding, 0),
       child: Container(
+        height: 44,
+        padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          color: VastraColors.surface,
+          color: VastraColors.surfaceElevated,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: VastraColors.borderLight),
+          border: Border.all(color: VastraColors.border),
         ),
         child: TabBar(
           controller: _tabCtrl,
           indicator: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            gradient: VastraTheme.goldGradient,
+            color: VastraColors.ivory,
           ),
           indicatorSize: TabBarIndicatorSize.tab,
           dividerColor: Colors.transparent,
-          labelColor: VastraColors.textOnGold,
-          unselectedLabelColor: VastraColors.warmGrayDark,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          labelColor: VastraColors.background,
+          unselectedLabelColor: VastraColors.textSecondary,
+          labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, fontFamily: 'Inter'),
           tabs: const [
             Tab(text: 'Fabric Catalog'),
             Tab(text: 'Add New Fabric'),
@@ -198,7 +195,6 @@ class _CatalogTab extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(
               VastraConstants.pagePadding, 16, VastraConstants.pagePadding, 80),
           children: [
-            // Built-in fabrics section
             _SectionHeader(
                 title: 'Built-in Fabrics',
                 subtitle: '${builtins.length} bundled fabrics'),
@@ -210,7 +206,6 @@ class _CatalogTab extends StatelessWidget {
                   onDelete: null,
                 )),
 
-            // User-uploaded section
             if (items.isNotEmpty) ...[
               const SizedBox(height: 20),
               _SectionHeader(
@@ -239,23 +234,23 @@ class _CatalogTab extends StatelessWidget {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: VastraColors.surfaceElevated,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Text('Delete "${item.name}"?',
-            style: const TextStyle(color: VastraColors.ivory, fontSize: 16)),
+            style: const TextStyle(color: VastraColors.ivory, fontSize: 15, fontFamily: 'Inter', fontWeight: FontWeight.bold)),
         content: Text(
           'This fabric will be permanently removed from your catalog.',
-          style: TextStyle(color: VastraColors.textSecondary, fontSize: 14),
+          style: TextStyle(color: VastraColors.textSecondary, fontSize: 13, fontFamily: 'Inter'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel',
-                style: TextStyle(color: VastraColors.warmGrayDark)),
+            child: const Text('Cancel',
+                style: TextStyle(color: VastraColors.textSecondary, fontFamily: 'Inter')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Delete',
-                style: TextStyle(color: Colors.redAccent)),
+                style: TextStyle(color: Colors.redAccent, fontFamily: 'Inter', fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -324,9 +319,8 @@ class _AddFabricTabState extends State<_AddFabricTab> {
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Fabric added to catalog ✓'),
-          backgroundColor: VastraColors.gold.withOpacity(0.9),
+        const SnackBar(
+          content: Text('Fabric added to catalog ✓'),
         ),
       );
       // Reset form
@@ -346,32 +340,27 @@ class _AddFabricTabState extends State<_AddFabricTab> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-          VastraConstants.pagePadding, 20, VastraConstants.pagePadding, 80),
+      padding: const EdgeInsets.fromLTRB(VastraConstants.pagePadding, 20, VastraConstants.pagePadding, 80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Image picker
-          _SectionLabel(label: 'Fabric Image *'),
+          const _SectionLabel(label: 'Fabric Image *'),
           const SizedBox(height: 8),
           GestureDetector(
             onTap: _pickImage,
-            child: AnimatedContainer(
-              duration: 300.ms,
+            child: Container(
               height: 180,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                color: VastraColors.surfaceCard,
+                borderRadius: BorderRadius.circular(12),
+                color: VastraColors.surfaceElevated,
                 border: Border.all(
-                  color: _imageBytes != null
-                      ? VastraColors.gold.withOpacity(0.6)
-                      : VastraColors.borderLight,
-                  width: _imageBytes != null ? 1.5 : 0.8,
+                  color: _imageBytes != null ? VastraColors.ivory : VastraColors.border,
+                  width: 1.0,
                 ),
               ),
               child: _imageBytes != null
                   ? ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
+                      borderRadius: BorderRadius.circular(11),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
@@ -396,19 +385,17 @@ class _AddFabricTabState extends State<_AddFabricTab> {
                             bottom: 8,
                             left: 8,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: VastraColors.gold.withOpacity(0.85),
-                                borderRadius: BorderRadius.circular(6),
+                                color: VastraColors.ivory,
+                                borderRadius: BorderRadius.circular(4),
                               ),
-                              child: Text('Change',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(
-                                          color: VastraColors.textOnGold,
-                                          fontSize: 10)),
+                              child: const Text('Change',
+                                  style: TextStyle(
+                                      color: VastraColors.background,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      fontFamily: 'Inter')),
                             ),
                           ),
                         ],
@@ -417,12 +404,12 @@ class _AddFabricTabState extends State<_AddFabricTab> {
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.add_photo_alternate_rounded,
-                            size: 36, color: VastraColors.gold.withOpacity(0.5)),
+                        const Icon(Icons.add_photo_alternate_rounded,
+                            size: 32, color: VastraColors.textSecondary),
                         const SizedBox(height: 8),
                         Text('Tap to upload fabric image',
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: VastraColors.textMuted,
+                                  color: VastraColors.textSecondary,
                                 )),
                         const SizedBox(height: 4),
                         Text('JPG, PNG — max 1024×1024',
@@ -434,15 +421,13 @@ class _AddFabricTabState extends State<_AddFabricTab> {
 
           const SizedBox(height: 20),
 
-          // Name
-          _SectionLabel(label: 'Fabric Name *'),
+          const _SectionLabel(label: 'Fabric Name *'),
           const SizedBox(height: 8),
           _TextField(controller: _nameCtrl, hint: 'e.g. Rose Garden Floral'),
 
           const SizedBox(height: 16),
 
-          // Category
-          _SectionLabel(label: 'Category'),
+          const _SectionLabel(label: 'Category'),
           const SizedBox(height: 8),
           _CategoryDropdown(
             value: _selectedCategory,
@@ -451,21 +436,19 @@ class _AddFabricTabState extends State<_AddFabricTab> {
 
           const SizedBox(height: 16),
 
-          // Material
-          _SectionLabel(label: 'Material'),
+          const _SectionLabel(label: 'Material'),
           const SizedBox(height: 8),
           _TextField(controller: _materialCtrl, hint: 'e.g. Cotton, Velvet, Silk'),
 
           const SizedBox(height: 16),
 
-          // Origin + SKU row
           Row(
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _SectionLabel(label: 'Origin'),
+                    const _SectionLabel(label: 'Origin'),
                     const SizedBox(height: 8),
                     _TextField(controller: _originCtrl, hint: 'e.g. India'),
                   ],
@@ -476,7 +459,7 @@ class _AddFabricTabState extends State<_AddFabricTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _SectionLabel(label: 'SKU'),
+                    const _SectionLabel(label: 'SKU'),
                     const SizedBox(height: 8),
                     _TextField(controller: _skuCtrl, hint: 'VAS-FL-001'),
                   ],
@@ -487,42 +470,31 @@ class _AddFabricTabState extends State<_AddFabricTab> {
 
           const SizedBox(height: 28),
 
-          // Save button
           GestureDetector(
             onTap: _isSaving ? null : _save,
-            child: AnimatedContainer(
-              duration: 250.ms,
-              height: 56,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
-                gradient: VastraTheme.goldGradient,
-                boxShadow: [
-                  BoxShadow(
-                    color: VastraColors.gold.withOpacity(0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
+            child: Container(
+              height: 52,
+              decoration: VastraTheme.goldDecoration(borderRadius: 12),
               child: Center(
                 child: _isSaving
                     ? const SizedBox(
-                        width: 20,
-                        height: 20,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: VastraColors.textOnGold),
+                            strokeWidth: 2, color: VastraColors.background),
                       )
-                    : Row(
+                    : const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.add_rounded,
-                              color: VastraColors.textOnGold, size: 20),
-                          const SizedBox(width: 8),
+                          Icon(Icons.add_rounded,
+                              color: VastraColors.background, size: 18),
+                          SizedBox(width: 6),
                           Text('Add to Catalog',
-                              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                    color: VastraColors.textOnGold,
+                              style: TextStyle(
+                                    color: VastraColors.background,
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 15,
+                                    fontSize: 14,
+                                    fontFamily: 'Inter',
                                   )),
                         ],
                       ),
@@ -541,13 +513,11 @@ class _StatChip extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
-  final Color color;
 
   const _StatChip({
     required this.label,
     required this.value,
     required this.icon,
-    required this.color,
   });
 
   @override
@@ -556,24 +526,18 @@ class _StatChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color: VastraColors.surfaceElevated,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.25)),
+          border: Border.all(color: VastraColors.border, width: 1.0),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 18, color: color),
+            Icon(icon, size: 18, color: VastraColors.ivory),
             const SizedBox(height: 4),
             Text(value,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(color: color, fontSize: 18, fontWeight: FontWeight.w700)),
+                style: const TextStyle(color: VastraColors.ivory, fontSize: 18, fontWeight: FontWeight.w700, fontFamily: 'Inter')),
             Text(label,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: VastraColors.textMuted, fontSize: 9.5),
+                style: const TextStyle(color: VastraColors.textSecondary, fontSize: 9.5, fontFamily: 'Inter'),
                 textAlign: TextAlign.center),
           ],
         ),
@@ -596,16 +560,18 @@ class _SectionHeader extends StatelessWidget {
             style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 14)),
         const SizedBox(width: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: VastraColors.gold.withOpacity(0.10),
+            color: VastraColors.surfaceElevated,
             borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: VastraColors.border),
           ),
           child: Text(subtitle,
               style: const TextStyle(
-                  color: VastraColors.warmGrayDark,
+                  color: VastraColors.textSecondary,
                   fontSize: 10,
-                  fontWeight: FontWeight.w500)),
+                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Inter')),
         ),
       ],
     );
@@ -620,8 +586,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: VastraColors.warmGrayDark,
-              letterSpacing: 0.3,
+              color: VastraColors.textSecondary,
             ));
   }
 }
@@ -637,18 +602,15 @@ class _TextField extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: VastraColors.surfaceCard,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: VastraColors.borderLight, width: 0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: VastraColors.border, width: 1.0),
       ),
       child: TextField(
         controller: controller,
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(color: VastraColors.ivory),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: VastraColors.ivory),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: VastraColors.textMuted, fontSize: 13),
+          hintStyle: const TextStyle(color: VastraColors.textMuted, fontSize: 13, fontFamily: 'Inter'),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         ),
@@ -668,8 +630,8 @@ class _CategoryDropdown extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: VastraColors.surfaceCard,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: VastraColors.borderLight, width: 0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: VastraColors.border, width: 1.0),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
       child: DropdownButton<FabricCategory>(
@@ -677,12 +639,8 @@ class _CategoryDropdown extends StatelessWidget {
         isExpanded: true,
         dropdownColor: VastraColors.surfaceElevated,
         underline: const SizedBox(),
-        icon: const Icon(Icons.keyboard_arrow_down_rounded,
-            color: VastraColors.warmGrayDark),
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(color: VastraColors.ivory),
+        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: VastraColors.textSecondary),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: VastraColors.ivory),
         items: FabricCategory.values
             .where((c) => c != FabricCategory.all)
             .map((c) => DropdownMenuItem(
@@ -717,22 +675,21 @@ class _FabricAdminTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: VastraColors.surfaceCard,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: VastraColors.borderLight, width: 0.8),
+        border: Border.all(color: VastraColors.border, width: 1.0),
       ),
       child: Row(
         children: [
-          // Fabric swatch preview
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
             child: SizedBox(
-              width: 44,
-              height: 44,
+              width: 40,
+              height: 40,
               child: item.assetPath != null
                   ? Image.asset(item.assetPath!, fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
                             color: VastraColors.border,
                             child: const Icon(Icons.texture_rounded,
-                                size: 20, color: VastraColors.textMuted),
+                                size: 18, color: VastraColors.textMuted),
                           ))
                   : item.imageBytes != null
                       ? Image.memory(
@@ -742,7 +699,7 @@ class _FabricAdminTile extends StatelessWidget {
                       : Container(
                           color: VastraColors.border,
                           child: const Icon(Icons.texture_rounded,
-                              size: 20, color: VastraColors.textMuted),
+                              size: 18, color: VastraColors.textMuted),
                         ),
             ),
           ),
@@ -752,40 +709,36 @@ class _FabricAdminTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(item.name,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelLarge
-                        ?.copyWith(fontSize: 13),
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(fontSize: 13),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
                 Text(
                     '${item.category.label} · ${item.material}',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: VastraColors.textMuted, fontSize: 11)),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: VastraColors.textMuted, fontSize: 11)),
               ],
             ),
           ),
-          // Builtin badge or publish toggle
           if (isBuiltin)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
-                color: VastraColors.gold.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(6),
+                color: VastraColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: VastraColors.border),
               ),
-              child: Text('Built-in',
-                  style: const TextStyle(
-                      color: VastraColors.warmGrayDark, fontSize: 9, fontWeight: FontWeight.w500)),
+              child: const Text('Built-in',
+                  style: TextStyle(
+                      color: VastraColors.textSecondary, fontSize: 9, fontWeight: FontWeight.w500, fontFamily: 'Inter')),
             )
           else ...[
             Switch(
               value: item.isPublished,
               onChanged: (_) => onToggle?.call(),
-              activeColor: VastraColors.gold,
-              inactiveThumbColor: VastraColors.textMuted,
+              activeColor: VastraColors.ivory,
+              activeTrackColor: VastraColors.border,
+              inactiveThumbColor: VastraColors.textSecondary,
+              inactiveTrackColor: VastraColors.background,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             IconButton(
@@ -798,7 +751,7 @@ class _FabricAdminTile extends StatelessWidget {
           ],
         ],
       ),
-    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0, duration: 300.ms);
+    );
   }
 }
 
@@ -807,23 +760,20 @@ class _EmptyUploads extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: VastraTheme.glassDecoration(borderRadius: 16),
+      decoration: BoxDecoration(
+        color: VastraColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: VastraColors.border),
+      ),
       child: Column(
         children: [
-          Icon(Icons.cloud_upload_outlined,
-              size: 36, color: VastraColors.textMuted.withOpacity(0.5)),
+          const Icon(Icons.cloud_upload_outlined, size: 32, color: VastraColors.textMuted),
           const SizedBox(height: 12),
           Text('No fabrics uploaded yet',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: VastraColors.textMuted)),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: VastraColors.textMuted)),
           const SizedBox(height: 6),
           Text('Use the "Add New Fabric" tab to upload your fabric images',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: VastraColors.textMuted.withOpacity(0.7)),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: VastraColors.textMuted),
               textAlign: TextAlign.center),
         ],
       ),

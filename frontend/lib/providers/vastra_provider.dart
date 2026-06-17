@@ -10,12 +10,10 @@ import '../services/api_service.dart';
 enum ProcessingStatus { idle, processing, done, error }
 
 class VastraProvider extends ChangeNotifier {
-  // ── State variables ────────────────────────────────────────────────────────
   Uint8List? _roomImageBytes;
   File? _roomImageFile;
   double _roomImageAspectRatio = 1.0;
-
-  ProductCategoryData? _selectedProduct;
+  ProductCategoryData? _selectedProduct = ProductCategoryData.all.first;
   Uint8List? _fabricImageBytes;
 
   ProcessingStatus _status = ProcessingStatus.idle;
@@ -28,13 +26,11 @@ class VastraProvider extends ChangeNotifier {
   Uint8List? _maskPreviewOverlay;
   Uint8List? _finalRenderedResult;
   bool _isProcessing = false;
-
   bool _isBrushMode = false;
   bool _isBrushAdd = true;
   double _brushSize = 25.0;
   Uint8List? _localMaskBytes;
   bool _refineWithDiffusion = false;
-
   double _tileScale = 1.0;
   double _rotation = 0.0;
   double _offsetX = 0.0;
@@ -121,6 +117,9 @@ class VastraProvider extends ChangeNotifier {
   void setSelectedProduct(ProductCategoryData product) {
     _selectedProduct = product;
     notifyListeners();
+    if (_interactivePoints.isNotEmpty && _currentSessionId != null) {
+      _updateInteractiveTaps();
+    }
   }
 
   void setFabricImage(Uint8List bytes) {
@@ -416,8 +415,9 @@ class VastraProvider extends ChangeNotifier {
   /// Calls /api/render to project the fabric texture onto the segmented mask
   Future<void> renderFinal(String fabricTextureId,
       {Uint8List? customFabricBytes, bool? bypassDiffusion}) async {
-    if (_currentSessionId == null)
+    if (_currentSessionId == null) {
       throw Exception('No active session. Please segment the room first.');
+    }
     _isProcessing = true;
     _status = ProcessingStatus.processing;
     _statusMessage = 'Rendering fabric texture projection...';

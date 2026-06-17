@@ -2,7 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
-import '../core/constants.dart';
+import '../models/product_category.dart';
 import '../providers/vastra_provider.dart';
 import 'fabric_catalog_screen.dart';
 
@@ -112,7 +112,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       context,
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => const FabricCatalogScreen(),
-        transitionDuration: VastraConstants.animationSlow,
+        transitionDuration: const Duration(milliseconds: 300),
         transitionsBuilder: (_, anim, __, child) => FadeTransition(
           opacity: anim,
           child: child,
@@ -129,19 +129,15 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       backgroundColor: VastraColors.background,
       body: Stack(
         children: [
-          // Background Gradient
-          Container(
-            decoration: const BoxDecoration(
-              gradient: VastraTheme.deepGradient,
-            ),
-          ),
-
           // Main Layout
           SafeArea(
             child: Column(
               children: [
                 // Top Custom Header / Bar
                 _buildHeader(context),
+
+                // Horizontal category selector
+                _buildCategorySelector(provider),
 
                 // Interactive Workspace
                 Expanded(
@@ -154,7 +150,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                           Text(
                             'Tap the target object in your room to select it',
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: VastraColors.gold,
+                                  color: VastraColors.textPrimary,
                                   fontWeight: FontWeight.w500,
                                 ),
                             textAlign: TextAlign.center,
@@ -167,16 +163,16 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                           if (provider.interactivePoints.isNotEmpty)
                             Text(
                               '${provider.interactivePoints.length} point(s) placed • Tap a point to delete it',
-                              style: TextStyle(
-                                color: VastraColors.warmGray.withOpacity(0.7),
+                              style: const TextStyle(
+                                color: VastraColors.textSecondary,
                                 fontSize: 12,
                               ),
                             )
                           else
-                            Text(
+                            const Text(
                               'E.g. Tap on your bedsheet or curtain to overlay fabrics',
                               style: TextStyle(
-                                color: VastraColors.warmGray.withOpacity(0.4),
+                                color: VastraColors.textMuted,
                                 fontSize: 11,
                               ),
                             ),
@@ -195,6 +191,62 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
           // Loading Overlay
           if (provider.isProcessing) _buildLoadingOverlay(provider),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCategorySelector(VastraProvider provider) {
+    final categories = ProductCategoryData.all;
+    
+    return Container(
+      height: 48,
+      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length,
+        physics: const BouncingScrollPhysics(),
+        itemBuilder: (context, index) {
+          final cat = categories[index];
+          final isSelected = provider.selectedProduct?.category == cat.category;
+          
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () {
+                if (provider.isProcessing) return;
+                provider.setSelectedProduct(cat);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: isSelected
+                    ? VastraTheme.goldDecoration(borderRadius: 12)
+                    : VastraTheme.glassDecoration(borderRadius: 12),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      cat.icon,
+                      size: 14,
+                      color: isSelected ? VastraColors.background : VastraColors.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      cat.label,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected ? VastraColors.background : VastraColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -218,18 +270,18 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                 ),
           ),
           const Spacer(),
-          // Custom step badge
+          // Custom step badge (Shadcn style)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: VastraColors.gold.withOpacity(0.12),
-              border: Border.all(color: VastraColors.gold.withOpacity(0.35)),
+              borderRadius: BorderRadius.circular(6),
+              color: VastraColors.surfaceElevated,
+              border: Border.all(color: VastraColors.border, width: 1.0),
             ),
             child: const Text(
               'Step 2 of 3',
               style: TextStyle(
-                color: VastraColors.gold,
+                color: VastraColors.ivory,
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
               ),
@@ -246,28 +298,22 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
         height: 240,
         decoration: BoxDecoration(
           color: VastraColors.surfaceCard,
-          borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
-          border: Border.all(color: VastraColors.borderLight),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: VastraColors.border),
         ),
         child: const Center(
-          child: Text('No room image available', style: TextStyle(color: VastraColors.warmGray)),
+          child: Text('No room image available', style: TextStyle(color: VastraColors.textSecondary)),
         ),
       );
     }
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 24,
-            spreadRadius: 2,
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: VastraColors.border, width: 1.0),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(VastraConstants.cardBorderRadius),
+        borderRadius: BorderRadius.circular(11),
         child: Center(
           child: AspectRatio(
             aspectRatio: provider.roomImageAspectRatio,
@@ -387,17 +433,17 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: Colors.black.withOpacity(0.65),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: VastraColors.gold.withOpacity(0.5)),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: VastraColors.border),
                                   ),
-                                  child: Row(
+                                  child: const Row(
                                     mainAxisSize: MainAxisSize.min,
-                                    children: const [
-                                      Icon(Icons.zoom_out_map_rounded, size: 12, color: VastraColors.gold),
+                                    children: [
+                                      Icon(Icons.zoom_out_map_rounded, size: 12, color: VastraColors.ivory),
                                       SizedBox(width: 4),
                                       Text(
                                         'Reset Zoom',
-                                        style: TextStyle(color: VastraColors.gold, fontSize: 10, fontWeight: FontWeight.w600),
+                                        style: TextStyle(color: VastraColors.ivory, fontSize: 10, fontWeight: FontWeight.w600),
                                       ),
                                     ],
                                   ),
@@ -416,6 +462,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       ),
     );
   }
+
   Widget _buildControlToolbar(VastraProvider provider) {
     final hasPoints = provider.interactivePoints.isNotEmpty || provider.maskPreviewOverlay != null;
 
@@ -423,8 +470,16 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       decoration: BoxDecoration(
         color: VastraColors.surfaceCard,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(color: VastraColors.borderLight, width: 0.8),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        border: Border.all(color: VastraColors.border, width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.55),
+            blurRadius: 16,
+            spreadRadius: 2,
+            offset: const Offset(0, -4),
+          )
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -436,7 +491,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.brush_rounded, color: VastraColors.gold, size: 18),
+                    const Icon(Icons.brush_rounded, color: VastraColors.ivory, size: 18),
                     const SizedBox(width: 8),
                     Text(
                       'Brush Mode',
@@ -449,54 +504,28 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                 ),
                 TextButton.icon(
                   onPressed: () => provider.toggleBrushMode(),
-                  icon: const Icon(Icons.touch_app_rounded, size: 14, color: VastraColors.gold),
-                  label: const Text('Back to Taps', style: TextStyle(color: VastraColors.gold, fontSize: 12)),
+                  icon: const Icon(Icons.touch_app_rounded, size: 14, color: VastraColors.ivory),
+                  label: const Text('Back to Taps', style: TextStyle(color: VastraColors.ivory, fontSize: 12)),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                ChoiceChip(
-                  label: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.add_circle_outline_rounded, size: 14, color: Colors.green),
-                      SizedBox(width: 4),
-                      Text('Brush Add', style: TextStyle(fontSize: 12, color: Colors.white)),
-                    ],
-                  ),
+                _buildToggleChip(
+                  label: 'Brush Add',
+                  icon: Icons.add_circle_outline_rounded,
+                  iconColor: Colors.green,
                   selected: provider.isBrushAdd,
-                  onSelected: (_) => provider.setBrushAdd(true),
-                  selectedColor: VastraColors.gold.withOpacity(0.25),
-                  backgroundColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    side: BorderSide(
-                      color: provider.isBrushAdd ? VastraColors.gold : VastraColors.borderLight,
-                    ),
-                  ),
+                  onSelected: () => provider.setBrushAdd(true),
                 ),
                 const SizedBox(width: 8),
-                ChoiceChip(
-                  label: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.remove_circle_outline_rounded, size: 14, color: Colors.red),
-                      SizedBox(width: 4),
-                      Text('Brush Erase', style: TextStyle(fontSize: 12, color: Colors.white)),
-                    ],
-                  ),
+                _buildToggleChip(
+                  label: 'Brush Erase',
+                  icon: Icons.remove_circle_outline_rounded,
+                  iconColor: Colors.red,
                   selected: !provider.isBrushAdd,
-                  onSelected: (_) => provider.setBrushAdd(false),
-                  selectedColor: VastraColors.gold.withOpacity(0.25),
-                  backgroundColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    side: BorderSide(
-                      color: !provider.isBrushAdd ? VastraColors.gold : VastraColors.borderLight,
-                    ),
-                  ),
+                  onSelected: () => provider.setBrushAdd(false),
                 ),
               ],
             ),
@@ -505,7 +534,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
               children: [
                 Text(
                   'Size: ${provider.brushSize.round()}px',
-                  style: const TextStyle(color: VastraColors.warmGray, fontSize: 12),
+                  style: const TextStyle(color: VastraColors.textSecondary, fontSize: 12),
                 ),
                 Expanded(
                   child: Slider(
@@ -513,15 +542,15 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                     min: 5.0,
                     max: 60.0,
                     divisions: 11,
-                    activeColor: VastraColors.gold,
-                    inactiveColor: VastraColors.borderLight,
+                    activeColor: VastraColors.ivory,
+                    inactiveColor: VastraColors.border,
                     onChanged: (val) => provider.setBrushSize(val),
                   ),
                 ),
               ],
             ),
           ] else ...[
-            // Row 1: Mode Switch & Reset (Wrapped to prevent overflow)
+            // Row 1: Mode Switch & Reset
             SizedBox(
               width: double.infinity,
               child: Wrap(
@@ -536,57 +565,27 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                     spacing: 6,
                     runSpacing: 4,
                     children: [
-                      Text(
+                      const Text(
                         'Tap Mode:',
                         style: TextStyle(
-                          color: VastraColors.warmGray.withOpacity(0.8),
+                          color: VastraColors.textSecondary,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      ChoiceChip(
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.add_circle_outline_rounded, size: 14, color: Colors.green),
-                            SizedBox(width: 4),
-                            Text('Add Zone', style: TextStyle(fontSize: 12, color: Colors.white)),
-                          ],
-                        ),
+                      _buildToggleChip(
+                        label: 'Add Zone',
+                        icon: Icons.add_circle_outline_rounded,
+                        iconColor: Colors.green,
                         selected: provider.isPositiveSelectionMode,
-                        onSelected: (_) => provider.toggleSelectionMode(),
-                        selectedColor: VastraColors.gold.withOpacity(0.25),
-                        backgroundColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(
-                            color: provider.isPositiveSelectionMode
-                                ? VastraColors.gold
-                                : VastraColors.borderLight,
-                          ),
-                        ),
+                        onSelected: () => provider.toggleSelectionMode(),
                       ),
-                      ChoiceChip(
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.remove_circle_outline_rounded, size: 14, color: Colors.red),
-                            SizedBox(width: 4),
-                            Text('Remove', style: TextStyle(fontSize: 12, color: Colors.white)),
-                          ],
-                        ),
+                      _buildToggleChip(
+                        label: 'Remove',
+                        icon: Icons.remove_circle_outline_rounded,
+                        iconColor: Colors.red,
                         selected: !provider.isPositiveSelectionMode,
-                        onSelected: (_) => provider.toggleSelectionMode(),
-                        selectedColor: VastraColors.gold.withOpacity(0.25),
-                        backgroundColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(
-                            color: !provider.isPositiveSelectionMode
-                                ? VastraColors.gold
-                                : VastraColors.borderLight,
-                          ),
-                        ),
+                        onSelected: () => provider.toggleSelectionMode(),
                       ),
                     ],
                   ),
@@ -597,14 +596,14 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                     children: [
                       if (provider.maskPreviewOverlay != null) ...[
                         IconButton(
-                          icon: const Icon(Icons.brush_rounded, color: VastraColors.gold),
+                          icon: const Icon(Icons.brush_rounded, color: VastraColors.ivory),
                           tooltip: 'Paint Corrections',
                           onPressed: () => provider.toggleBrushMode(),
                         ),
                         const SizedBox(width: 4),
                       ],
                       IconButton(
-                        icon: const Icon(Icons.undo_rounded, color: VastraColors.gold),
+                        icon: const Icon(Icons.undo_rounded, color: VastraColors.ivory),
                         tooltip: 'Undo Last Tap',
                         onPressed: hasPoints && !provider.isProcessing
                             ? () => provider.undoLastTap().catchError((error) {
@@ -621,7 +620,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                       ),
                       const SizedBox(width: 4),
                       IconButton(
-                        icon: const Icon(Icons.refresh_rounded, color: VastraColors.gold),
+                        icon: const Icon(Icons.refresh_rounded, color: VastraColors.ivory),
                         tooltip: 'Reset Taps',
                         onPressed: hasPoints && !provider.isProcessing
                             ? () {
@@ -643,42 +642,31 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
           // Row 2: Action Button
           GestureDetector(
             onTap: hasPoints && !provider.isProcessing ? _onProceed : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+            child: Container(
               width: double.infinity,
-              height: 56,
+              height: 52,
               decoration: hasPoints
-                  ? BoxDecoration(
-                      borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
-                      gradient: VastraTheme.goldGradient,
-                      boxShadow: [
-                        BoxShadow(
-                          color: VastraColors.gold.withOpacity(0.40),
-                          blurRadius: 24,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    )
+                  ? VastraTheme.goldDecoration(borderRadius: 12)
                   : BoxDecoration(
-                      borderRadius: BorderRadius.circular(VastraConstants.buttonBorderRadius),
+                      borderRadius: BorderRadius.circular(12),
                       color: VastraColors.surface,
-                      border: Border.all(color: VastraColors.borderLight),
+                      border: Border.all(color: VastraColors.border),
                     ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.auto_awesome_motion_rounded,
-                    size: 20,
-                    color: hasPoints ? VastraColors.textOnGold : VastraColors.textMuted,
+                    size: 18,
+                    color: hasPoints ? VastraColors.background : VastraColors.textMuted,
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Text(
                     hasPoints ? 'Proceed to Fabrics' : 'Tap Image to Start',
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: hasPoints ? VastraColors.textOnGold : VastraColors.textMuted,
+                          color: hasPoints ? VastraColors.background : VastraColors.textMuted,
                           fontWeight: FontWeight.w600,
-                          fontSize: 15,
+                          fontSize: 14,
                         ),
                   ),
                 ],
@@ -690,26 +678,73 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
     );
   }
 
+  Widget _buildToggleChip({
+    required String label,
+    required IconData icon,
+    required Color iconColor,
+    required bool selected,
+    required VoidCallback onSelected,
+  }) {
+    return GestureDetector(
+      onTap: onSelected,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: selected ? VastraColors.ivory : Colors.transparent,
+          border: Border.all(
+            color: selected ? VastraColors.ivory : VastraColors.border,
+            width: 1.0,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withOpacity(0.08),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  )
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: selected ? VastraColors.background : iconColor),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: selected ? VastraColors.background : VastraColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildLoadingOverlay(VastraProvider provider) {
     return Container(
-      color: Colors.black.withOpacity(0.75),
+      color: Colors.black.withOpacity(0.60),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(
-              width: 54,
-              height: 54,
+              width: 36,
+              height: 36,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: VastraColors.gold,
+                color: VastraColors.ivory,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Text(
               provider.statusMessage.isNotEmpty ? provider.statusMessage : 'Processing tap inputs...',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: VastraColors.warmGray,
+                    color: VastraColors.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
             ),
