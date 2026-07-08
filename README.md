@@ -36,32 +36,8 @@
 
 ## 🏗️ System Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Flutter Client                           │
-│  ┌──────────┐  ┌──────────────┐  ┌────────────┐  ┌──────────┐ │
-│  │ Onboard  │→ │  Home Screen  │→ │ Processing │→ │  Result  │ │
-│  │ Screen   │  │ (Upload/Pick) │  │   Screen   │  │  Screen  │ │
-│  └──────────┘  └──────────────┘  └──────┬─────┘  └────┬─────┘ │
-│                                         │              │       │
-│         Provider State Management       │    Adjust Sliders    │
-└─────────────────────────────────────────┼──────────────┼───────┘
-                                          │              │
-                                    REST API (JSON/PNG)
-                                          │              │
-┌─────────────────────────────────────────┼──────────────┼───────┐
-│                     FastAPI Backend     │              │       │
-│  ┌──────────────────┐  ┌───────────────┴──────────────┴─────┐ │
-│  │  /api/upload      │  │  /api/interact    /api/render      │ │
-│  │  SAM2 Encoder     │  │  SAM2 Decoder     Texture Engine   │ │
-│  └────────┬─────────┘  └───────────┬──────────────┬─────────┘ │
-│           │                        │              │            │
-│  ┌────────▼─────────┐  ┌──────────▼──┐  ┌───────▼─────────┐  │
-│  │ Session Cache     │  │   MiDaS     │  │ 9-Stage Render  │  │
-│  │ (TTL: 10 min)     │  │ Depth Est.  │  │    Pipeline     │  │
-│  └──────────────────┘  └─────────────┘  └─────────────────┘  │
-└───────────────────────────────────────────────────────────────┘
-```
+<img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/5bc88c33-ba2c-4887-983a-cda99a305ec6" />
+
 
 ---
 
@@ -313,9 +289,3 @@ Both models are automatically downloaded and cached on first server startup. GPU
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ---
-
-<div align="center">
-
-**Built with ❤️ using Flutter, FastAPI, PyTorch, and OpenCV**
-
-</div>
