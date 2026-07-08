@@ -1,15 +1,4 @@
-"""
-Vastra FastAPI Backend - main.py
-=================================
 
-Interactive SAM3 Decoupled Architecture.
-
-Endpoints:
-  GET  /health          - liveness check
-  POST /api/upload      - upload image -> run SAM2 encoder -> cache embedding -> return session_id
-  POST /api/interact    - send points -> run SAM2 decoder -> return preview overlay PNG
-  POST /api/render      - confirm mask + fabric texture -> run texture engine -> return final PNG
-"""
 
 import sys
 
