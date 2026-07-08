@@ -79,8 +79,8 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen> {
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return WillPopScope(
-          onWillPop: () async => false,
+        return PopScope(
+          canPop: false,
           child: Dialog(
             backgroundColor: VastraColors.surfaceCard,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -405,7 +405,7 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen> {
               Switch(
                 value: provider.refineWithDiffusion,
                 onChanged: (val) => provider.toggleDiffusionRefinement(),
-                activeColor: VastraColors.ivory,
+                activeThumbColor: VastraColors.ivory,
                 activeTrackColor: VastraColors.border,
                 inactiveThumbColor: VastraColors.textSecondary,
                 inactiveTrackColor: VastraColors.background,
@@ -503,8 +503,8 @@ class _FabricCatalogScreenState extends State<FabricCatalogScreen> {
             color: isCurrent
                 ? VastraColors.ivory
                 : isDone
-                    ? VastraColors.ivory.withOpacity(0.5)
-                    : VastraColors.ivory.withOpacity(0.15),
+                    ? VastraColors.ivory.withValues(alpha: 0.5)
+                    : VastraColors.ivory.withValues(alpha: 0.15),
           ),
         );
       }),
@@ -560,7 +560,7 @@ class _FabricFingerprintCard extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.55),
+                          color: Colors.black.withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -633,7 +633,7 @@ class _FabricFingerprintCard extends StatelessWidget {
                                 color: Color(c),
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: Colors.white.withOpacity(0.15),
+                                  color: Colors.white.withValues(alpha: 0.15),
                                   width: 0.5,
                                 ),
                               ),
@@ -737,7 +737,7 @@ class _FabricPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rng = math.Random(seed);
-    final bg = colors.first.withOpacity(0.25);
+    final bg = colors.first.withValues(alpha: 0.25);
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), Paint()..color = bg);
 
     // Draw woven grid lines
@@ -751,14 +751,14 @@ class _FabricPatternPainter extends CustomPainter {
     const step = 10.0;
     for (double x = 0; x < size.width; x += step) {
       paint.color = (x / step).floor().isEven
-          ? c1.withOpacity(0.28)
-          : c2.withOpacity(0.20);
+          ? c1.withValues(alpha: 0.28)
+          : c2.withValues(alpha: 0.20);
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
     for (double y = 0; y < size.height; y += step) {
       paint.color = (y / step).floor().isEven
-          ? c2.withOpacity(0.28)
-          : c1.withOpacity(0.20);
+          ? c2.withValues(alpha: 0.28)
+          : c1.withValues(alpha: 0.20);
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
 
@@ -771,7 +771,7 @@ class _FabricPatternPainter extends CustomPainter {
           Offset(x, y),
           r,
           Paint()
-            ..color = (rng.nextBool() ? c1 : c2).withOpacity(0.3)
+            ..color = (rng.nextBool() ? c1 : c2).withValues(alpha: 0.3)
             ..style = PaintingStyle.fill);
     }
   }

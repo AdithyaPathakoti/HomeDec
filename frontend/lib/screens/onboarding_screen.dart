@@ -106,7 +106,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     borderRadius: BorderRadius.circular(3),
                     color: i == _currentPage
                         ? VastraColors.ivory
-                        : VastraColors.ivory.withOpacity(0.2),
+                        : VastraColors.ivory.withValues(alpha: 0.2),
                   ),
                 ),
               ),
@@ -135,7 +135,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     color: VastraColors.ivory,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.white.withOpacity(0.12),
+                        color: Colors.white.withValues(alpha: 0.12),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       )

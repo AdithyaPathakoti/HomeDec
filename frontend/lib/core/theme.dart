@@ -186,7 +186,7 @@ class VastraTheme {
       ),
       boxShadow: shadows ?? [
         BoxShadow(
-          color: Colors.black.withOpacity(0.45),
+          color: Colors.black.withValues(alpha: 0.45),
           blurRadius: 10,
           spreadRadius: 0,
           offset: const Offset(0, 4),
@@ -217,7 +217,7 @@ class VastraTheme {
       ),
       boxShadow: [
         BoxShadow(
-          color: Colors.white.withOpacity(0.12),
+          color: Colors.white.withValues(alpha: 0.12),
           blurRadius: 8,
           spreadRadius: 0,
           offset: const Offset(0, 2),
@@ -247,7 +247,7 @@ class VastraTheme {
       ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.25),
+          color: Colors.black.withValues(alpha: 0.25),
           blurRadius: 4,
           offset: const Offset(0, 2),
         )

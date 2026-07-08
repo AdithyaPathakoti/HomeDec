@@ -87,12 +87,12 @@ class _AnimatedGlowButtonState extends State<AnimatedGlowButton>
                 boxShadow: widget.isPrimary && _isActive
                     ? [
                         BoxShadow(
-                          color: VastraColors.gold.withOpacity(glow),
+                          color: VastraColors.gold.withValues(alpha: glow),
                           blurRadius: 22,
                           spreadRadius: 1,
                         ),
                         BoxShadow(
-                          color: VastraColors.goldDark.withOpacity(glow * 0.4),
+                          color: VastraColors.goldDark.withValues(alpha: glow * 0.4),
                           blurRadius: 44,
                           spreadRadius: 3,
                         ),
@@ -115,7 +115,7 @@ class _AnimatedGlowButtonState extends State<AnimatedGlowButton>
               border: Border.all(
                 color: widget.isPrimary
                     ? (_isActive
-                        ? VastraColors.gold.withOpacity(0.6)
+                        ? VastraColors.gold.withValues(alpha: 0.6)
                         : VastraColors.borderLight)
                     : VastraColors.borderLight,
                 width: 1.0,

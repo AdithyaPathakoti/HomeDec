@@ -66,7 +66,7 @@ class _ParticlePainter extends CustomPainter {
           p.opacity * (0.5 + 0.5 * math.sin(elapsed * 0.9 + p.phase));
 
       final paint = Paint()
-        ..color = p.color.withOpacity(opacity.clamp(0.04, 0.85))
+        ..color = p.color.withValues(alpha: opacity.clamp(0.04, 0.85))
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, p.size * 0.9);
 
       canvas.drawCircle(

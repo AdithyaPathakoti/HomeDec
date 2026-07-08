@@ -34,7 +34,7 @@ dependencies:
   provider: ^6.1.2
 
   # Typography
-  google_fonts: ^6.2.1
+  google_fonts: ^8.1.0
 
   # Animations
   flutter_animate: ^4.5.0

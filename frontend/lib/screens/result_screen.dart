@@ -100,7 +100,7 @@ class _ResultScreenState extends State<ResultScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      barrierColor: Colors.black.withOpacity(0.6),
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (context) => const _FabricAdjustmentPanel(),
     ).then((_) {
       if (!mounted) return;
@@ -256,7 +256,7 @@ class _ResultScreenState extends State<ResultScreen> {
         ),
         if (isProcessing)
           Container(
-            color: Colors.black.withOpacity(0.55),
+            color: Colors.black.withValues(alpha: 0.55),
             child: const Center(
               child: CircularProgressIndicator(
                 color: VastraColors.ivory,
@@ -506,7 +506,7 @@ class _FabricAdjustmentPanelState extends State<_FabricAdjustmentPanel> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.55),
+            color: Colors.black.withValues(alpha: 0.55),
             blurRadius: 20,
             spreadRadius: 2,
             offset: const Offset(0, -4),

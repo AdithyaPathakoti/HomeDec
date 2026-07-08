@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -86,7 +85,7 @@ class VastraProvider extends ChangeNotifier {
     _roomImageBytes = bytes;
     if (file != null) {
       _roomImageFile = file;
-    } else {
+    } else if (!kIsWeb) {
       try {
         final tempDir = Directory.systemTemp;
         final tempFile = File(
@@ -98,7 +97,6 @@ class VastraProvider extends ChangeNotifier {
       }
     }
 
-    // Decode image aspect ratio in the background
     ui.decodeImageFromList(bytes, (ui.Image img) {
       _roomImageAspectRatio = img.width / img.height;
       notifyListeners();

@@ -101,12 +101,12 @@ class _ProductCardState extends State<ProductCard>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: widget.isSelected
-                  ? VastraColors.gold.withOpacity(0.18)
-                  : VastraColors.ivory.withOpacity(0.05),
+                  ? VastraColors.gold.withValues(alpha: 0.18)
+                  : VastraColors.ivory.withValues(alpha: 0.05),
               border: Border.all(
                 color: widget.isSelected
-                    ? VastraColors.gold.withOpacity(0.7)
-                    : VastraColors.ivory.withOpacity(0.08),
+                    ? VastraColors.gold.withValues(alpha: 0.7)
+                    : VastraColors.ivory.withValues(alpha: 0.08),
                 width: 1.0,
               ),
             ),
@@ -149,10 +149,10 @@ class _ProductCardState extends State<ProductCard>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
-                color: VastraColors.gold.withOpacity(0.15),
+                color: VastraColors.gold.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: VastraColors.gold.withOpacity(0.5),
+                  color: VastraColors.gold.withValues(alpha: 0.5),
                   width: 0.8,
                 ),
               ),

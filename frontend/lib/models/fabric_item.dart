@@ -161,9 +161,9 @@ class BuiltinFabrics {
       sku: 'VAS-FL-001',
       assetPath: 'assets/fabrics/floral.jpg',
       colorTags: [
-        Colors.pink.shade300.value,
-        Colors.green.shade300.value,
-        Colors.white.value
+        Colors.pink.shade300.toARGB32(),
+        Colors.green.shade300.toARGB32(),
+        Colors.white.toARGB32()
       ],
       aiCompatScore: 94,
       origin: 'India',
@@ -176,7 +176,7 @@ class BuiltinFabrics {
       material: 'Velvet',
       sku: 'VAS-VL-001',
       assetPath: 'assets/fabrics/velvet.jpg',
-      colorTags: [const Color(0xFF1A0A2E).value, const Color(0xFF3D1566).value],
+      colorTags: [const Color(0xFF1A0A2E).toARGB32(), const Color(0xFF3D1566).toARGB32()],
       aiCompatScore: 91,
       origin: 'Italy',
       weaveType: 'Pile',
@@ -189,9 +189,9 @@ class BuiltinFabrics {
       sku: 'VAS-ST-001',
       assetPath: 'assets/fabrics/velvet.jpg',
       colorTags: [
-        const Color(0xFFE8C88A).value,
-        const Color(0xFFC4956A).value,
-        Colors.white.value
+        const Color(0xFFE8C88A).toARGB32(),
+        const Color(0xFFC4956A).toARGB32(),
+        Colors.white.toARGB32()
       ],
       aiCompatScore: 88,
       origin: 'Morocco',
@@ -205,9 +205,9 @@ class BuiltinFabrics {
       sku: 'VAS-GE-001',
       assetPath: 'assets/fabrics/velvet.jpg',
       colorTags: [
-        const Color(0xFF1E6FA8).value,
-        Colors.white.value,
-        const Color(0xFF0D3D5E).value
+        const Color(0xFF1E6FA8).toARGB32(),
+        Colors.white.toARGB32(),
+        const Color(0xFF0D3D5E).toARGB32()
       ],
       aiCompatScore: 92,
       origin: 'Turkey',
@@ -220,7 +220,7 @@ class BuiltinFabrics {
       material: 'Silk',
       sku: 'VAS-SK-001',
       assetPath: 'assets/fabrics/luxury_white.jpg',
-      colorTags: [const Color(0xFFF5F0EB).value, const Color(0xFFE8DDD0).value],
+      colorTags: [const Color(0xFFF5F0EB).toARGB32(), const Color(0xFFE8DDD0).toARGB32()],
       aiCompatScore: 96,
       origin: 'China',
       weaveType: 'Satin',
@@ -232,7 +232,7 @@ class BuiltinFabrics {
       material: 'Cotton',
       sku: 'VAS-CO-001',
       assetPath: 'assets/fabrics/floral.jpg',
-      colorTags: [const Color(0xFFC17A50).value, const Color(0xFFE8A878).value],
+      colorTags: [const Color(0xFFC17A50).toARGB32(), const Color(0xFFE8A878).toARGB32()],
       aiCompatScore: 90,
       origin: 'India',
       weaveType: 'Plain',
@@ -244,7 +244,7 @@ class BuiltinFabrics {
       material: 'Silk Blend',
       sku: 'VAS-LX-001',
       assetPath: 'assets/fabrics/luxury_white.jpg',
-      colorTags: [const Color(0xFF6B1A1A).value, const Color(0xFFE8C060).value],
+      colorTags: [const Color(0xFF6B1A1A).toARGB32(), const Color(0xFFE8C060).toARGB32()],
       aiCompatScore: 97,
       origin: 'Italy',
       weaveType: 'Damask',
@@ -256,7 +256,7 @@ class BuiltinFabrics {
       material: 'Linen',
       sku: 'VAS-MN-001',
       assetPath: 'assets/fabrics/luxury_white.jpg',
-      colorTags: [const Color(0xFF8FAF8A).value, const Color(0xFFD4E0D0).value],
+      colorTags: [const Color(0xFF8FAF8A).toARGB32(), const Color(0xFFD4E0D0).toARGB32()],
       aiCompatScore: 89,
       origin: 'Belgium',
       weaveType: 'Plain',
@@ -269,9 +269,9 @@ class BuiltinFabrics {
       sku: 'VAS-TR-001',
       assetPath: 'assets/fabrics/floral.jpg',
       colorTags: [
-        const Color(0xFF8B3A3A).value,
-        const Color(0xFFE8A840).value,
-        const Color(0xFF2A5A3A).value
+        const Color(0xFF8B3A3A).toARGB32(),
+        const Color(0xFFE8A840).toARGB32(),
+        const Color(0xFF2A5A3A).toARGB32()
       ],
       aiCompatScore: 93,
       origin: 'India',
@@ -285,9 +285,9 @@ class BuiltinFabrics {
       sku: 'VAS-TX-001',
       assetPath: 'assets/fabrics/velvet.jpg',
       colorTags: [
-        const Color(0xFF1A1A3E).value,
-        const Color(0xFF2E3F6E).value,
-        const Color(0xFFD4C5B0).value
+        const Color(0xFF1A1A3E).toARGB32(),
+        const Color(0xFF2E3F6E).toARGB32(),
+        const Color(0xFFD4C5B0).toARGB32()
       ],
       aiCompatScore: 87,
       origin: 'UK',
@@ -301,9 +301,9 @@ class BuiltinFabrics {
       sku: 'VAS-PR-001',
       assetPath: 'assets/fabrics/floral.jpg',
       colorTags: [
-        const Color(0xFFF0C0C0).value,
-        const Color(0xFFC8A0B0).value,
-        Colors.white.value
+        const Color(0xFFF0C0C0).toARGB32(),
+        const Color(0xFFC8A0B0).toARGB32(),
+        Colors.white.toARGB32()
       ],
       aiCompatScore: 91,
       origin: 'India',
@@ -316,7 +316,7 @@ class BuiltinFabrics {
       material: 'Velvet',
       sku: 'VAS-VL-002',
       assetPath: 'assets/fabrics/velvet.jpg',
-      colorTags: [const Color(0xFF0D4A2A).value, const Color(0xFF1A7A48).value],
+      colorTags: [const Color(0xFF0D4A2A).toARGB32(), const Color(0xFF1A7A48).toARGB32()],
       aiCompatScore: 95,
       origin: 'Italy',
       weaveType: 'Pile',

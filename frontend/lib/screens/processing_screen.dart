@@ -414,15 +414,15 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
                                           color: isPositive
-                                              ? Colors.green.withOpacity(0.85)
-                                              : Colors.red.withOpacity(0.85),
+                                              ? Colors.green.withValues(alpha: 0.85)
+                                              : Colors.red.withValues(alpha: 0.85),
                                           border: Border.all(
                                             color: Colors.white,
                                             width: borderWidth,
                                           ),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: Colors.black.withOpacity(0.4),
+                                              color: Colors.black.withValues(alpha: 0.4),
                                               blurRadius: shadowBlur,
                                               offset: Offset(0, shadowOffsetY),
                                             )
@@ -453,7 +453,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.65),
+                                    color: Colors.black.withValues(alpha: 0.65),
                                     borderRadius: BorderRadius.circular(6),
                                     border: Border.all(color: VastraColors.border),
                                   ),
@@ -495,7 +495,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
         border: Border.all(color: VastraColors.border, width: 1.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.55),
+            color: Colors.black.withValues(alpha: 0.55),
             blurRadius: 16,
             spreadRadius: 2,
             offset: const Offset(0, -4),
@@ -720,7 +720,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: Colors.white.withOpacity(0.08),
+                    color: Colors.white.withValues(alpha: 0.08),
                     blurRadius: 4,
                     offset: const Offset(0, 1),
                   )
@@ -748,7 +748,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
 
   Widget _buildLoadingOverlay(VastraProvider provider) {
     return Container(
-      color: Colors.black.withOpacity(0.60),
+      color: Colors.black.withValues(alpha: 0.60),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -794,7 +794,7 @@ class BrushStrokePainter extends CustomPainter {
     if (points.isEmpty) return;
     
     final paint = Paint()
-      ..color = isAdd ? Colors.green.withOpacity(0.55) : Colors.red.withOpacity(0.55)
+      ..color = isAdd ? Colors.green.withValues(alpha: 0.55) : Colors.red.withValues(alpha: 0.55)
       ..strokeWidth = brushSize
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round

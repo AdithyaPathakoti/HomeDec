@@ -89,7 +89,7 @@ class _BeforeAfterSliderState extends State<BeforeAfterSlider> {
                       border: Border.all(color: VastraColors.border, width: 1.0),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
                         ),
@@ -128,10 +128,10 @@ class _BeforeAfterSliderState extends State<BeforeAfterSlider> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: VastraColors.surfaceElevated.withOpacity(0.8),
+        color: VastraColors.surfaceElevated.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: VastraColors.border.withOpacity(0.5),
+          color: VastraColors.border.withValues(alpha: 0.5),
           width: 0.8,
         ),
       ),

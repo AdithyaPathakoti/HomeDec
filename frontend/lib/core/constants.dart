@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class VastraConstants {
   VastraConstants._();
 
@@ -5,7 +7,12 @@ class VastraConstants {
   // Change to your machine's IP when running on a physical Android device.
   // Use http://10.0.2.2:8000 for Android emulator.
   // Use http://localhost:8000 for iOS simulator or desktop.
-  static const String baseUrl = 'http://192.168.1.10:8000';
+  static String get baseUrl {
+    if (kIsWeb) {
+      return 'http://localhost:8000';
+    }
+    return 'http://192.168.1.6:8000';
+  }
   static const String uploadEndpoint     = '/api/upload';
   static const String interactEndpoint   = '/api/interact';
   static const String renderEndpoint     = '/api/render';

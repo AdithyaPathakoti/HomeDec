@@ -248,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildLoadingOverlay() {
     return Container(
-      color: Colors.black.withOpacity(0.60),
+      color: Colors.black.withValues(alpha: 0.60),
       child: const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
